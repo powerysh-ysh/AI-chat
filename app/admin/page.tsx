@@ -66,7 +66,7 @@ export default function AdminPage() {
   }
 
   const filtered = useMemo(() => projects.filter(p => {
-    const matchesQuery = `${p.team} ${p.code} ${p.members} ${p.problem}`.toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = `${p.team} ${p.members} ${p.problem}`.toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "전체" || p.status === status;
     return matchesQuery && matchesStatus;
   }), [projects, query, status]);
@@ -76,8 +76,8 @@ export default function AdminPage() {
 
   function exportCsv() {
     const rows = [
-      ["팀 코드","팀명","팀원","상태","문제","해결책","서비스명","슬로건","수익모델","최근 저장"],
-      ...filtered.map(p => [p.code,p.team,p.members,p.status,p.problem,p.solution,p.selectedName,p.result?.slogan??"",p.result?.revenueModel??"",p.updatedAt]),
+      ["팀명","팀원","상태","문제","해결책","서비스명","슬로건","수익모델","최근 저장"],
+      ...filtered.map(p => [p.team,p.members,p.status,p.problem,p.solution,p.selectedName,p.result?.slogan??"",p.result?.revenueModel??"",p.updatedAt]),
     ];
     const csv = "\ufeff" + rows.map(r => r.map(x => `"${String(x).replaceAll('"','""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -156,7 +156,7 @@ export default function AdminPage() {
           {orderMessage && <p className="order-message">{orderMessage}</p>}
         </section>}
         <div className="admin-tools">
-          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="🔎 팀명·팀 코드·문제 검색"/>
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="🔎 팀명·팀원·문제 검색"/>
           <div>{["전체","팀 등록","문제 작성","해결책 작성","사업화 완료"].map(x=><button key={x} className={status===x?"on":""} onClick={()=>setStatus(x)}>{x}</button>)}</div>
           <span>{filtered.length}개 팀</span>
         </div>
@@ -164,7 +164,7 @@ export default function AdminPage() {
           <div className="table-head"><span>팀</span><span>진행 상태</span><span>발견한 문제</span><span>최근 저장</span><span></span></div>
           {filtered.length === 0 && <div className="empty-team">아직 조건에 맞는 팀이 없습니다.</div>}
           {filtered.map(p=><button className="team-row" key={p.id} onClick={()=>setSelected(p)}>
-            <span><b>{p.team}</b><small>{p.code} · {p.members || "팀원 미입력"}</small></span>
+            <span><b>{p.team}</b><small>{p.members || "팀원 미입력"}</small></span>
             <span><i className={`status s${p.step}`}>{p.status}</i><small>M{Math.min(3,p.step+1)} 진행</small></span>
             <span>{p.problem || "아직 문제를 작성하지 않았습니다."}</span>
             <span>{formatTime(p.updatedAt)}</span><span>자세히 →</span>
@@ -174,7 +174,7 @@ export default function AdminPage() {
       {selected && <div className="detail-backdrop" onClick={()=>setSelected(null)}>
         <aside className="detail" onClick={e=>e.stopPropagation()}>
           <button className="detail-close" onClick={()=>setSelected(null)}>×</button>
-          <p>TEAM {selected.code}</p><h2>{selected.team}</h2><span>{selected.members || "팀원 미입력"} · {selected.status}</span>
+          <p>LOCAL HERO TEAM</p><h2>{selected.team}</h2><span>{selected.members || "팀원 미입력"} · {selected.status}</span>
           <Detail title="M1. 발견한 문제" text={selected.problem}/>
           <Detail title="M2. 해결 아이디어" text={selected.solution}/>
           {selected.result ? <><div className="service-result"><small>AI 추천 서비스</small><strong>{selected.selectedName || selected.result.serviceNames?.[0]}</strong><p>“{selected.result.slogan}”</p></div>

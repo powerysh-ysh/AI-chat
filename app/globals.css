@@ -15,6 +15,8 @@
 @media(max-width:850px){.admin>header{padding:0 15px}.admin nav a{display:none}.admin-title{align-items:flex-start;gap:20px}.stat-grid{grid-template-columns:1fr 1fr}.admin-tools{flex-wrap:wrap}.admin-tools>input{width:100%}.admin-tools>div{overflow:auto}.table-head{display:none}.team-row{grid-template-columns:1fr auto}.team-row>span:nth-child(3){grid-column:1/-1}.team-row>span:nth-child(4){font-size:12px}.team-row>span:last-child{display:none}}
 @media(max-width:520px){.admin-body{padding:25px 14px}.admin-title h1{font-size:27px}.admin-title>button{font-size:0}.admin-title>button:after{content:"↓ CSV";font-size:13px}.stat-grid{gap:8px}.stat-grid article{padding:15px}.stat-grid strong{font-size:28px}.admin-tools>div{width:100%}.detail{padding:25px 19px}.admin-login section{padding:29px 22px}}
 @media print{.admin>header,.admin-body,.detail-close,.detail-print{display:none!important}.detail-backdrop{position:static;background:#fff}.detail{width:100%;box-shadow:none;height:auto}}
+.restore-box .restore-fields{display:grid;grid-template-columns:minmax(0,1fr) 145px auto}.restore-box .restore-fields input{text-transform:none;letter-spacing:0}.restore-box .restore-fields .pin-input{letter-spacing:3px}.restore-box .restore-fields button{min-height:44px}
+@media(max-width:520px){.restore-box .restore-fields{grid-template-columns:1fr 1fr}.restore-box .restore-fields button{grid-column:1/-1;padding:12px}}
 
 .app-switch{display:flex;align-items:center;gap:6px}.app-switch>a{color:#675d54;text-decoration:none;padding:9px 11px;border-radius:10px;font-size:13px;font-weight:850}.app-switch>a.active{background:#fff0e5;color:var(--orange)}
 @media(max-width:850px){.app-switch>a{font-size:11px;padding:7px}.app-switch .ghost{font-size:11px;padding:8px}}
