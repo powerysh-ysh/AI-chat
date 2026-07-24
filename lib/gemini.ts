@@ -80,52 +80,68 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
   const primaryModel = !configuredModel || retiredModels.has(configuredModel)
     ? "gemini-3.5-flash"
     : configuredModel;
-  // 주 모델이 혼잡하거나 종료되면 별도 용량의 경량 모델로 자동 우회합니다.
   const models = [...new Set([
     primaryModel,
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
   ])];
 
-  const parts: GeminiPart[] = [
-    { text: prompt },
-    ...images.map(parseDataUrl),
-  ];
-  const generationConfig: Record<string, unknown> = {};
-  if (!useSearch) generationConfig.responseMimeType = "application/json";
-
-  const body: Record<string, unknown> = {
-    contents: [{ role: "user", parts }],
-    generationConfig,
-  };
-  if (useSearch) body.tools = [{ google_search: {} }];
-
   let lastError: Error | null = null;
-  for (const model of models) {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
+  // 무료 등급에서 Google Search가 막히면 같은 요청을 검색 없이 한 번 더 수행합니다.
+  const searchModes = useSearch ? [true, false] : [false];
 
-    if (response.ok) {
-      try {
-        return parseAiJson(extractGeminiText(await response.json()));
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error("Gemini 응답을 정리하지 못했습니다.");
-        console.error("Gemini response parsing failed", model, lastError.message);
-        continue;
+  for (const searchEnabled of searchModes) {
+    const fallbackNotice = useSearch && !searchEnabled
+      ? `\n\n중요: 지금은 실시간 웹 검색 도구를 사용할 수 없습니다. 일반 지식과 사용자가 제공한 내용만으로 초안을 작성하세요. 확인하지 않은 수치·통계·출처·URL을 만들지 마세요. evidence 필드가 있다면 빈 배열로 두고, researchSummary에는 "실시간 검색 없이 작성한 초안으로 현장 확인이 필요합니다."라고 적으세요.`
+      : "";
+    const parts: GeminiPart[] = [
+      { text: prompt + fallbackNotice },
+      ...images.map(parseDataUrl),
+    ];
+    const generationConfig: Record<string, unknown> = {};
+    if (!searchEnabled) generationConfig.responseMimeType = "application/json";
+
+    const body: Record<string, unknown> = {
+      contents: [{ role: "user", parts }],
+      generationConfig,
+    };
+    if (searchEnabled) body.tools = [{ google_search: {} }];
+
+    for (const model of models) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+
+      if (response.ok) {
+        try {
+          const parsed = parseAiJson(extractGeminiText(await response.json())) as Record<string, unknown>;
+          if (useSearch && !searchEnabled) {
+            if ("evidence" in parsed) parsed.evidence = [];
+            if ("researchSummary" in parsed) {
+              parsed.researchSummary = "실시간 검색 없이 팀 입력을 바탕으로 작성한 초안입니다. 현장 확인이 필요합니다.";
+            }
+            parsed.searchFallback = true;
+          }
+          return parsed;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error("Gemini 응답을 정리하지 못했습니다.");
+          console.error("Gemini response parsing failed", model, searchEnabled, lastError.message);
+          continue;
+        }
       }
-    }
 
-    const detail = await response.text();
-    console.error("Gemini request failed", model, response.status, detail.slice(0, 700));
-    const error = createGeminiError(response.status, detail, model);
-    lastError = error;
-    if (!error.retryable) throw error;
+      const detail = await response.text();
+      console.error("Gemini request failed", model, searchEnabled, response.status, detail.slice(0, 700));
+      const error = createGeminiError(response.status, detail, model);
+      lastError = error;
+      if (!error.retryable && !searchEnabled) throw error;
+      if (!error.retryable && searchEnabled) break;
+    }
   }
 
   throw lastError ?? new Error("모든 Gemini 모델 호출에 실패했습니다. 잠시 후 다시 시도해 주세요.");
