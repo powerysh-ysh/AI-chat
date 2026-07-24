@@ -23,6 +23,10 @@ type CoachResult = {
   firstExperiment: string;
   pitch: string;
   qa: { question: string; answer: string }[];
+  researchSummary?: string;
+  evidence?: { claim: string; sourceTitle: string; url: string }[];
+  assumptions?: string[];
+  risks?: string[];
   demo?: boolean;
 };
 
@@ -148,8 +152,8 @@ ${result.pitch}`;
         headers: { "content-type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!response.ok) throw new Error("AI 코치가 잠시 쉬고 있어요.");
-      const data = (await response.json()) as CoachResult;
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "AI 검색·분석에 실패했습니다.");
       setResult(data);
       setSelectedName(data.serviceNames[0]);
       setStep(5);
@@ -374,7 +378,13 @@ ${result.pitch}`;
                 <Editable title="🌱 지역사회 효과" value={result.localImpact} onChange={v=>setResult({...result,localImpact:v})}/>
                 <Editable className="wide" title="🚀 행사가 끝난 뒤 첫 번째 실험" value={result.firstExperiment} onChange={v=>setResult({...result,firstExperiment:v})}/>
               </div>
-              {result.demo && <p className="demo-note">연습 모드 결과입니다. AI 연결키를 설정하면 매번 새로운 맞춤 결과를 만듭니다.</p>}
+              {result.researchSummary && <section className="research-block"><h3>🔍 AI 근거 조사</h3><p>{result.researchSummary}</p>
+                <div>{result.evidence?.map((item,i)=><a key={`${item.url}-${i}`} href={item.url} target="_blank" rel="noreferrer"><b>{item.sourceTitle}</b><span>{item.claim}</span></a>)}</div>
+              </section>}
+              <div className="validation-grid">
+                {!!result.assumptions?.length && <section><h3>🧪 아직 검증할 가정</h3>{result.assumptions.map((x,i)=><p key={`${x}-${i}`}>{i+1}. {x}</p>)}</section>}
+                {!!result.risks?.length && <section><h3>⚠️ 실행 위험</h3>{result.risks.map((x,i)=><p key={`${x}-${i}`}>{i+1}. {x}</p>)}</section>}
+              </div>
             </article>
             <aside className="tool-card">
               <h3>팀의 말로 다듬어 보세요</h3><p>내용을 누르면 바로 수정할 수 있어요. AI의 답을 그대로 쓰지 않아도 됩니다.</p>
