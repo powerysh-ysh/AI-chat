@@ -39,7 +39,7 @@ export default function AdminPage() {
   const [selected, setSelected] = useState<Project | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("전체");
-  const [teamView, setTeamView] = useState<"전체 데이터" | "실시간 표시">("전체 데이터");
+  const [teamView, setTeamView] = useState<"전체 데이터" | "실시간 표시">("실시간 표시");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
@@ -208,6 +208,7 @@ export default function AdminPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "화면 표시 설정을 저장하지 못했습니다.");
       closeSelectionMode();
+      setTeamView(isLiveDisplay ? "실시간 표시" : "전체 데이터");
       await load(pin);
       window.alert(`${data.count ?? selectedProjects.length}개 팀을 실시간 화면에서 ${isLiveDisplay ? "표시" : "숨김"} 처리했습니다. 팀 데이터는 그대로 보관됩니다.`);
     } catch (e) {
@@ -283,7 +284,15 @@ export default function AdminPage() {
             <button onClick={exportCsv}>↓ CSV</button>
             <button
               className={selectionMode ? "select-teams active" : "select-teams"}
-              onClick={() => selectionMode ? closeSelectionMode() : setSelectionMode(true)}
+              onClick={() => {
+                if (selectionMode) {
+                  closeSelectionMode();
+                  setTeamView("실시간 표시");
+                  return;
+                }
+                setTeamView("전체 데이터");
+                setSelectionMode(true);
+              }}
               disabled={teamActionBusy}
             >
               {selectionMode ? "선택 취소" : "표시 팀 관리"}
