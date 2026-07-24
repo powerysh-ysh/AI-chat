@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [orderMode, setOrderMode] = useState(false);
   const [presentationOrder, setPresentationOrder] = useState<Project[]>([]);
   const [orderMessage, setOrderMessage] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const refreshInFlight = useRef(false);
 
   useEffect(() => {
@@ -168,6 +169,73 @@ export default function AdminPage() {
     }
   }
 
+  async function deleteProject(project: Project) {
+    const typed = window.prompt(
+      `‘${project.team}’ 팀을 영구 삭제합니다.\n확인하려면 팀 이름을 그대로 입력해 주세요.`,
+      "",
+    );
+    if (typed === null) return;
+    if (typed.trim() !== project.team.trim()) {
+      window.alert("팀 이름이 일치하지 않아 삭제하지 않았습니다.");
+      return;
+    }
+
+    setDeleteBusy(true);
+    try {
+      const response = await fetch("/api/admin/projects", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", "x-admin-pin": pin },
+        body: JSON.stringify({ code: project.code }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "팀을 삭제하지 못했습니다.");
+      setSelected(null);
+      await load(pin);
+      window.alert(`‘${project.team}’ 팀을 삭제했습니다.`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "팀을 삭제하지 못했습니다.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function deleteAllProjects() {
+    if (projects.length === 0) {
+      window.alert("삭제할 팀이 없습니다.");
+      return;
+    }
+
+    const typed = window.prompt(
+      `새 행사를 시작하기 위해 등록된 ${projects.length}개 팀과 모든 결과를 영구 삭제합니다.\n확인하려면 ‘전체삭제’를 입력해 주세요.`,
+      "",
+    );
+    if (typed === null) return;
+    if (typed.trim() !== "전체삭제") {
+      window.alert("확인 문구가 일치하지 않아 삭제하지 않았습니다.");
+      return;
+    }
+    if (!window.confirm("삭제한 팀 데이터는 복구할 수 없습니다. 정말 전체 삭제할까요?")) return;
+
+    setDeleteBusy(true);
+    try {
+      const response = await fetch("/api/admin/projects", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", "x-admin-pin": pin },
+        body: JSON.stringify({ deleteAll: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "전체 팀을 삭제하지 못했습니다.");
+      setSelected(null);
+      setPresentationOrder([]);
+      await load(pin);
+      window.alert(`${data.deleted ?? projects.length}개 팀을 삭제했습니다. 새 행사를 시작할 수 있습니다.`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "전체 팀을 삭제하지 못했습니다.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   if (!signedIn) return (
     <main className="admin-login">
       <Link href="/" className="admin-home">← 참가자 스튜디오</Link>
@@ -191,7 +259,13 @@ export default function AdminPage() {
       <section className="admin-body live-admin-body">
         <div className="admin-title">
           <div><p>M3 LIVE CONTROL</p><h1>팀별 실시간 진행 상황</h1><span>각 팀의 현재 단계와 작성 내용을 5초마다 자동으로 갱신합니다.</span></div>
-          <div className="admin-actions"><button onClick={() => setOrderMode(x => !x)}>🎤 발표 순서</button><button onClick={exportCsv}>↓ CSV</button></div>
+          <div className="admin-actions">
+            <button onClick={() => setOrderMode(x => !x)}>🎤 발표 순서</button>
+            <button onClick={exportCsv}>↓ CSV</button>
+            <button className="reset-teams" onClick={deleteAllProjects} disabled={deleteBusy}>
+              {deleteBusy ? "처리 중…" : "새 행사 · 팀 초기화"}
+            </button>
+          </div>
         </div>
 
         <div className="live-strip">
@@ -262,13 +336,19 @@ export default function AdminPage() {
             <Detail title="지역사회 효과" text={selected.result.localImpact} />
             <details><summary>3분 발표문 보기</summary><p>{selected.result.pitch}</p></details></> :
             <div className="not-yet">아직 AI 사업화 결과를 만들지 않았습니다.</div>}
-          <button className="detail-print" onClick={() => window.print()}>인쇄·PDF 저장</button>
+          <div className="detail-actions">
+            <button className="detail-print" onClick={() => window.print()}>인쇄·PDF 저장</button>
+            <button className="detail-delete" onClick={() => deleteProject(selected)} disabled={deleteBusy}>
+              {deleteBusy ? "삭제 중…" : "이 팀 삭제"}
+            </button>
+          </div>
         </aside>
       </div>}
 
       <style jsx global>{`
         .admin-brand-link{display:flex;align-items:center;gap:11px;color:#fff;text-decoration:none}.admin-brand-link>div{display:grid}.admin-brand-link small{color:#d0c4bb}
         .live-admin-body{max-width:1500px}
+        .admin-actions .reset-teams{background:#fff!important;color:#b42318!important;border:1px solid #e8b4ad!important}.admin-actions button:disabled{opacity:.5;cursor:wait}
         .live-strip{display:flex;align-items:center;gap:8px;margin-top:20px;background:#28211d;color:#fff;width:max-content;max-width:100%;border-radius:999px;padding:9px 14px;font-size:12px}
         .live-strip b{color:#ffbf87;letter-spacing:1px}.live-strip small{color:#ffb4a0;margin-left:8px}.live-pulse{width:9px;height:9px;border-radius:50%;background:#3ee48f;box-shadow:0 0 0 0 #3ee48f80;animation:livePulse 1.5s infinite}
         .live-tools{border-radius:17px;margin-bottom:16px}.live-tools>div{overflow:auto;white-space:nowrap}
@@ -278,9 +358,10 @@ export default function AdminPage() {
         .live-card-head{display:grid;grid-template-columns:58px 1fr auto;gap:13px;align-items:center}.team-sequence{display:grid;place-items:center;width:54px;height:54px;background:#28211d;color:#fff;border-radius:17px;font-size:24px;font-weight:950}.team-sequence small{font-size:8px;letter-spacing:1px;color:#ffba8e}.live-card-head>div{min-width:0}.live-card-head>div>small{color:#9b8d81}.live-card-head h2{font-size:22px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-card-head p{margin:0;color:#81756b;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-card-head>i{font-style:normal;background:#eee7e0;color:#86796f;border-radius:99px;padding:7px 10px;font-size:11px;font-weight:850}.live-card-head>i.active{background:#def7e9;color:#24724a}
         .stage-line{display:flex;align-items:end;justify-content:space-between;margin-top:19px}.stage-line>div{display:grid;gap:2px}.stage-line b{font-size:10px;color:#ee5a24;letter-spacing:1px}.stage-line strong{font-size:17px}.stage-line>span{font-size:12px;color:#8c8076}.mini-progress{height:7px;background:#eee6dd;border-radius:99px;overflow:hidden;margin:9px 0 16px}.mini-progress i{display:block;height:100%;background:linear-gradient(90deg,#ff5b22,#ffc83d);border-radius:99px;transition:width .35s}
         .live-content{display:grid;grid-template-columns:1fr 1fr;gap:9px}.live-content section{min-width:0;background:#faf6f1;border-radius:13px;padding:11px}.live-content section:last-child{grid-column:1/-1}.live-content section.complete-content{background:#ebf8f0}.live-content small{display:block;color:#a05730;font-weight:900;font-size:10px;margin-bottom:5px}.live-content p{margin:0;color:#5f564e;font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}.live-team-card footer{display:flex;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid #eee4da;font-size:11px;color:#90847a}.live-team-card footer strong{color:#ee5a24}.live-empty{grid-column:1/-1;background:#fff;border:1px solid #e7d8c8;border-radius:18px}
+        .detail-actions{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:22px}.detail-actions .detail-print{margin-top:0}.detail-delete{border:1px solid #d54b3d;background:#fff;color:#b42318;border-radius:12px;padding:14px 18px;font-weight:900;cursor:pointer}.detail-delete:disabled{opacity:.5;cursor:wait}
         @keyframes livePulse{70%{box-shadow:0 0 0 7px #3ee48f00}}
         @media(max-width:980px){.live-team-grid{grid-template-columns:1fr}}
-        @media(max-width:600px){.live-card-head{grid-template-columns:48px 1fr}.team-sequence{width:46px;height:46px;font-size:20px}.live-card-head>i{grid-column:1/-1;width:max-content}.live-content{grid-template-columns:1fr}.live-content section:last-child{grid-column:auto}.live-team-card{padding:16px}.live-strip{width:100%;border-radius:13px;flex-wrap:wrap}}
+        @media(max-width:600px){.live-card-head{grid-template-columns:48px 1fr}.team-sequence{width:46px;height:46px;font-size:20px}.live-card-head>i{grid-column:1/-1;width:max-content}.live-content{grid-template-columns:1fr}.live-content section:last-child{grid-column:auto}.live-team-card{padding:16px}.live-strip{width:100%;border-radius:13px;flex-wrap:wrap}.detail-actions{grid-template-columns:1fr}.admin-actions{flex-wrap:wrap}}
       `}</style>
     </main>
   );
