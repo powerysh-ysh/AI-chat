@@ -317,6 +317,7 @@ ${result.pitch}`;
           {step === 1 && <MissionCard icon="🔎" coach="M1에서 완성한 ‘문제 한 문장’을 그대로 옮겨 적으세요. 누가, 어떤 상황에서, 왜 불편한지가 보이면 좋아요.">
             <label className="field-label">M1. 우리가 발견한 지역 문제</label>
             <textarea className="big-input" value={form.problem} onChange={e=>setForm({...form,problem:e.target.value})} placeholder="예: 부산을 처음 찾은 외국인 관광객이 전통시장에서 메뉴를 이해하기 어려워 주문할 때 불편을 겪고 있다."/>
+            <p className="privacy-note">🔒 이 내용은 AI 분석에 사용됩니다. 이름·전화번호·주소 등 개인을 알아볼 수 있는 정보는 입력하지 마세요.</p>
             <div className="formula">💡 <strong>문장 공식</strong>　[어떤 사람]이 [어떤 상황]에서 [무엇 때문에] 불편을 겪고 있다.</div>
             <div className="idea-hints"><b>막막하다면 이렇게 적어도 됩니다</b><span>“버스를 기다릴 때 시간이 안 보여 답답했다.”</span><span>“시장에 갔는데 처음 온 사람은 주문하기 어려워 보였다.”</span></div>
             <Nav onBack={()=>setStep(0)} disabled={!form.problem.trim()} onNext={analyzeProblem} nextLabel="AI로 문제 분석하기 ✨" />
