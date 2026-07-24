@@ -1,6 +1,8 @@
+import { callGeminiJson } from "@/lib/gemini";
+
 type Input = { images?: string[] };
 
-function extractText(payload: unknown): string {
+function extractOpenAiText(payload: unknown): string {
   const data = payload as { output_text?: string; output?: { content?: { text?: string }[] }[] };
   if (data.output_text) return data.output_text;
   return data.output?.flatMap(x => x.content ?? []).map(x => x.text ?? "").join("") ?? "";
@@ -21,9 +23,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "M1·M2 활동지 사진을 선택해 주세요." }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "실제 AI가 연결되지 않았습니다. 운영자에게 알려 주세요." }, { status: 503 });
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!openAiKey && !geminiKey) {
+    return Response.json({ error: "AI API 키가 연결되지 않았습니다. 운영자에게 알려 주세요." }, { status: 503 });
   }
 
   const instruction = `첨부 이미지는 지역문제 해결 창업 워크숍의 M1 문제발견 및 M2 해결 아이디어 활동지입니다.
@@ -36,13 +39,22 @@ solution은 참가자의 원래 아이디어를 유지해 "우리 팀은 [고객
 {"problem":"M1 문제 문장","solution":"M2 해결 문장","extractedNotes":["사진에서 실제로 읽힌 핵심 메모"],"warnings":["흐리거나 뜻이 불분명해 참가자가 확인할 부분"]}`;
 
   try {
+    if (geminiKey) {
+      try {
+        return Response.json(await callGeminiJson({ prompt: instruction, images }));
+      } catch (error) {
+        console.error("Gemini workshop extraction failed", error);
+        if (!openAiKey) throw error;
+      }
+    }
+
     const content: ({ type: "input_text"; text: string } | { type: "input_image"; image_url: string })[] = [
       { type: "input_text", text: instruction },
       ...images.map(image_url => ({ type: "input_image" as const, image_url })),
     ];
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${openAiKey}` },
       body: JSON.stringify({
         model: process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini",
         input: [{ role: "user", content }],
@@ -60,7 +72,7 @@ solution은 참가자의 원래 아이디어를 유지해 "우리 팀은 [고객
           : "사진 분석에 실패했습니다. 글씨가 잘 보이도록 한 장씩 다시 촬영해 주세요.";
       return Response.json({ error: message }, { status: 502 });
     }
-    return Response.json(parseJson(extractText(await response.json())));
+    return Response.json(parseJson(extractOpenAiText(await response.json())));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "사진 분석 오류" }, { status: 500 });
   }

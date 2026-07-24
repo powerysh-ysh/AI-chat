@@ -24,9 +24,10 @@ export async function POST(request: Request) {
   }
 
   const mode = input.mode === "solutions" ? "solutions" : "analyze";
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "실제 AI가 연결되지 않았습니다. Vercel에 OPENAI_API_KEY를 등록해 주세요.", code: "AI_NOT_CONFIGURED" }, { status: 503 });
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!openAiKey && !geminiKey) {
+    return Response.json({ error: "Vercel에 GEMINI_API_KEY 또는 OPENAI_API_KEY를 등록해 주세요.", code: "AI_NOT_CONFIGURED" }, { status: 503 });
   }
 
   const prompt = mode === "analyze"
@@ -52,9 +53,21 @@ M2 원안을 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요. 첫
 {"candidates":[{"title":"이름","type":"방식","description":"누구의 어떤 문제를 어떻게 해결하는지","value":"고객이 얻는 변화","feasibility":"작은 시험 방법"}],"recommendation":0}`;
 
   try {
+    if (geminiKey) {
+      try {
+        return Response.json(await callGeminiJson({
+          prompt,
+          useSearch: mode === "solutions",
+        }));
+      } catch (error) {
+        console.error("Gemini ideation failed", error);
+        if (!openAiKey) throw error;
+      }
+    }
+
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${openAiKey}` },
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
         tools: mode === "solutions" ? [{ type: "web_search" }] : [],
@@ -70,3 +83,4 @@ M2 원안을 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요. 첫
     return Response.json({ error: error instanceof Error ? error.message : "AI 분석 오류" }, { status: 500 });
   }
 }
+import { callGeminiJson } from "@/lib/gemini";
