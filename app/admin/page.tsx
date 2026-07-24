@@ -27,7 +27,7 @@ type Project = {
   createdAt?: string | null;
   updatedAt?: string | null;
   presentationOrder?: number | null;
-  isExample?: boolean;
+  isLiveDisplay?: boolean;
 };
 
 const STAGES = ["팀 등록", "활동지", "문제 분석", "해결안", "AI 사업화", "사업 한 장", "발표 준비"];
@@ -39,7 +39,7 @@ export default function AdminPage() {
   const [selected, setSelected] = useState<Project | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("전체");
-  const [teamView, setTeamView] = useState<"전체 팀" | "실시간팀" | "예시팀">("전체 팀");
+  const [teamView, setTeamView] = useState<"전체 데이터" | "실시간 표시">("전체 데이터");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
@@ -82,7 +82,7 @@ export default function AdminPage() {
       setProjects(nextProjects);
       if (!orderMode) {
         setPresentationOrder([...nextProjects]
-          .filter((p: Project) => p.result)
+          .filter((p: Project) => p.result && p.isLiveDisplay === true)
           .sort((a: Project, b: Project) => (a.presentationOrder ?? 999) - (b.presentationOrder ?? 999)));
       }
       setSignedIn(true);
@@ -113,15 +113,14 @@ export default function AdminPage() {
     const selectedStage = STAGES.indexOf(status) + 1;
     const matchesStatus = status === "전체" || (selectedStage > 0 && stageNumber(p) >= selectedStage);
     const matchesTeamView =
-      teamView === "전체 팀" ||
-      (teamView === "예시팀" && p.isExample === true) ||
-      (teamView === "실시간팀" && p.isExample !== true);
+      teamView === "전체 데이터" ||
+      (teamView === "실시간 표시" && p.isLiveDisplay === true);
     return matchesQuery && matchesStatus && matchesTeamView;
   }), [registeredProjects, query, status, teamView]);
 
-  const liveProjects = projects.filter(p => p.isExample !== true);
-  const exampleCount = projects.filter(p => p.isExample === true).length;
-  const completed = liveProjects.filter(p => p.result).length;
+  const liveProjects = projects.filter(p => p.isLiveDisplay === true);
+  const completed = projects.filter(p => p.result).length;
+  const liveCompleted = liveProjects.filter(p => p.result).length;
 
   function exportCsv() {
     const rows = [
@@ -137,7 +136,7 @@ export default function AdminPage() {
   }
 
   function createRandomOrder() {
-    const ready = projects.filter(p => p.result);
+    const ready = projects.filter(p => p.result && p.isLiveDisplay === true);
     for (let i = ready.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [ready[i], ready[j]] = [ready[j], ready[i]];
@@ -189,7 +188,7 @@ export default function AdminPage() {
     setSelectedCodes(new Set());
   }
 
-  async function setSelectedProjectsAsExample(isExample: boolean) {
+  async function setSelectedProjectsLiveDisplay(isLiveDisplay: boolean) {
     const selectedProjects = registeredProjects.filter(project => selectedCodes.has(project.code));
     if (selectedProjects.length === 0) {
       window.alert("먼저 팀을 선택해 주세요.");
@@ -202,17 +201,55 @@ export default function AdminPage() {
         method: "POST",
         headers: { "content-type": "application/json", "x-admin-pin": pin },
         body: JSON.stringify({
-          exampleCodes: selectedProjects.map(project => project.code),
-          isExample,
+          displayCodes: selectedProjects.map(project => project.code),
+          isLiveDisplay,
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "예시팀 설정을 저장하지 못했습니다.");
+      if (!response.ok) throw new Error(data.error ?? "화면 표시 설정을 저장하지 못했습니다.");
       closeSelectionMode();
       await load(pin);
-      window.alert(`${data.count ?? selectedProjects.length}개 팀을 ${isExample ? "예시팀으로 지정" : "실시간팀으로 전환"}했습니다. 데이터는 그대로 보관됩니다.`);
+      window.alert(`${data.count ?? selectedProjects.length}개 팀을 실시간 화면에서 ${isLiveDisplay ? "표시" : "숨김"} 처리했습니다. 팀 데이터는 그대로 보관됩니다.`);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "예시팀 설정을 저장하지 못했습니다.");
+      window.alert(e instanceof Error ? e.message : "화면 표시 설정을 저장하지 못했습니다.");
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
+  async function deleteSelectedProjects() {
+    const selectedProjects = registeredProjects.filter(project => selectedCodes.has(project.code));
+    if (selectedProjects.length === 0) {
+      window.alert("먼저 삭제할 팀을 선택해 주세요.");
+      return;
+    }
+
+    const names = selectedProjects.map(project => project.team || "이름 없는 팀").join(", ");
+    const typed = window.prompt(
+      `선택한 ${selectedProjects.length}개 팀과 작성 결과를 DB에서 삭제합니다.\n${names}\n\n정말 삭제하려면 ‘선택삭제’를 입력해 주세요.`,
+      "",
+    );
+    if (typed === null) return;
+    if (typed.trim() !== "선택삭제") {
+      window.alert("확인 문구가 일치하지 않아 삭제하지 않았습니다.");
+      return;
+    }
+
+    setTeamActionBusy(true);
+    try {
+      const response = await fetch("/api/admin/projects", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", "x-admin-pin": pin },
+        body: JSON.stringify({ codes: selectedProjects.map(project => project.code) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "선택한 팀을 삭제하지 못했습니다.");
+      closeSelectionMode();
+      setSelected(null);
+      await load(pin);
+      window.alert(`${data.deleted ?? selectedProjects.length}개 팀을 삭제했습니다.`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "선택한 팀을 삭제하지 못했습니다.");
     } finally {
       setTeamActionBusy(false);
     }
@@ -249,7 +286,7 @@ export default function AdminPage() {
               onClick={() => selectionMode ? closeSelectionMode() : setSelectionMode(true)}
               disabled={teamActionBusy}
             >
-              {selectionMode ? "선택 취소" : "예시팀 관리"}
+              {selectionMode ? "선택 취소" : "표시 팀 관리"}
             </button>
           </div>
         </div>
@@ -258,19 +295,19 @@ export default function AdminPage() {
           <span className="live-pulse" />
           <b>LIVE</b>
           <span>{lastSyncedAt ? `${lastSyncedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} 동기화` : "연결 중"}</span>
-          <em>신규 팀 자동 표시 · 최대 5초</em>
+          <em>선택 팀 진행 상황 자동 갱신 · 최대 5초</em>
           {error && <small>{error}</small>}
         </div>
 
         <div className="stat-grid">
-          <article><span>실시간 참여</span><strong>{liveProjects.length}</strong><small>예시팀 제외</small></article>
-          <article><span>예시 팀</span><strong>{exampleCount}</strong><small>계속 보관</small></article>
-          <article><span>사업화 완료</span><strong>{completed}</strong><small>AI 결과 생성</small></article>
-          <article className="rate"><span>실시간 완성률</span><strong>{liveProjects.length ? Math.round(completed / liveProjects.length * 100) : 0}%</strong><i><b style={{ width: `${liveProjects.length ? completed / liveProjects.length * 100 : 0}%` }} /></i></article>
+          <article><span>전체 데이터</span><strong>{projects.length}</strong><small>DB에 저장된 팀</small></article>
+          <article><span>실시간 표시</span><strong>{liveProjects.length}</strong><small>화면에 선택한 팀</small></article>
+          <article><span>사업화 완료</span><strong>{completed}</strong><small>전체 AI 결과 생성</small></article>
+          <article className="rate"><span>표시 팀 완성률</span><strong>{liveProjects.length ? Math.round(liveCompleted / liveProjects.length * 100) : 0}%</strong><i><b style={{ width: `${liveProjects.length ? liveCompleted / liveProjects.length * 100 : 0}%` }} /></i></article>
         </div>
 
         {orderMode && <section className="order-panel">
-          <div className="order-head"><div><span>LOCAL HERO PITCH</span><h2>발표 순서 정하기</h2><p>사업화를 완료한 팀만 자동으로 모았습니다.</p></div><div><button onClick={createRandomOrder}>🎲 무작위 다시 뽑기</button><button className="save-order" onClick={saveOrder} disabled={loading || presentationOrder.length === 0}>{loading ? "저장 중…" : "순서 DB 저장"}</button></div></div>
+          <div className="order-head"><div><span>LOCAL HERO PITCH</span><h2>발표 순서 정하기</h2><p>실시간 표시로 선택했고 사업화까지 완료한 팀만 모았습니다.</p></div><div><button onClick={createRandomOrder}>🎲 무작위 다시 뽑기</button><button className="save-order" onClick={saveOrder} disabled={loading || presentationOrder.length === 0}>{loading ? "저장 중…" : "순서 DB 저장"}</button></div></div>
           {presentationOrder.length === 0 ? <p className="order-empty">아직 사업화를 완료한 팀이 없습니다.</p> :
             <div className="order-list">{presentationOrder.map((p, i) => <div key={p.code}><strong>{i + 1}</strong><span><b>{p.team}</b><small>{p.selectedName || p.result?.serviceNames?.[0] || "서비스명 선택 전"}</small></span><nav><button onClick={() => moveTeam(i, -1)} disabled={i === 0}>↑</button><button onClick={() => moveTeam(i, 1)} disabled={i === presentationOrder.length - 1}>↓</button></nav></div>)}</div>}
           {orderMessage && <p className="order-message">{orderMessage}</p>}
@@ -278,24 +315,27 @@ export default function AdminPage() {
 
         <div className="admin-tools live-tools">
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="🔎 팀명·팀원·문제 검색" />
-          <div className="team-view-filter">{(["전체 팀", "실시간팀", "예시팀"] as const).map(x => <button key={x} className={teamView === x ? "on team-view-on" : ""} onClick={() => setTeamView(x)}>{x}</button>)}</div>
+          <div className="team-view-filter">{(["전체 데이터", "실시간 표시"] as const).map(x => <button key={x} className={teamView === x ? "on team-view-on" : ""} onClick={() => setTeamView(x)}>{x}</button>)}</div>
           <div className="stage-filter">{["전체", ...STAGES].map(x => <button key={x} className={status === x ? "on" : ""} onClick={() => setStatus(x)}>{x}</button>)}</div>
           <span>{filtered.length}개 팀</span>
         </div>
 
         {selectionMode && <section className="team-selection-bar">
           <div>
-            <b>예시로 보여줄 팀을 선택하세요</b>
-            <span>팀 데이터는 삭제되지 않습니다. 예시팀과 실시간팀 사이에서 표시만 바뀝니다.</span>
+            <b>실시간 화면에 띄울 팀을 선택하세요</b>
+            <span>표시·해제는 데이터를 지우지 않습니다. 삭제는 별도 확인 후에만 실행됩니다.</span>
           </div>
           <nav>
             <button onClick={() => setSelectedCodes(new Set(filtered.map(project => project.code)))}>현재 목록 전체 선택</button>
             <button onClick={() => setSelectedCodes(new Set())}>선택 해제</button>
-            <button className="mark-example" onClick={() => setSelectedProjectsAsExample(true)} disabled={selectedCodes.size === 0 || teamActionBusy}>
-              {teamActionBusy ? "저장 중…" : `예시팀으로 지정 (${selectedCodes.size})`}
+            <button className="mark-display" onClick={() => setSelectedProjectsLiveDisplay(true)} disabled={selectedCodes.size === 0 || teamActionBusy}>
+              {teamActionBusy ? "처리 중…" : `실시간 화면에 표시 (${selectedCodes.size})`}
             </button>
-            <button className="mark-live" onClick={() => setSelectedProjectsAsExample(false)} disabled={selectedCodes.size === 0 || teamActionBusy}>
-              {teamActionBusy ? "저장 중…" : `실시간팀으로 전환 (${selectedCodes.size})`}
+            <button className="unmark-display" onClick={() => setSelectedProjectsLiveDisplay(false)} disabled={selectedCodes.size === 0 || teamActionBusy}>
+              {teamActionBusy ? "처리 중…" : `화면에서 숨기기 (${selectedCodes.size})`}
+            </button>
+            <button className="delete-selected" onClick={deleteSelectedProjects} disabled={selectedCodes.size === 0 || teamActionBusy}>
+              {teamActionBusy ? "처리 중…" : `선택 팀 삭제 (${selectedCodes.size})`}
             </button>
           </nav>
         </section>}
@@ -314,10 +354,10 @@ export default function AdminPage() {
             >
               {selectionMode && <span className="team-check" aria-hidden="true">{isSelected ? "✓" : ""}</span>}
               <div className="live-card-head">
-                <span className="team-sequence">{teamNumber.get(p.code) ?? "-"}<small>TEAM</small></span>
+                <span className="team-sequence">{teamNumber.get(p.code) ?? "-"}<small>DATA</small></span>
                 <div><small>우리 팀</small><h2>{p.team || "이름 없는 팀"}</h2><p>{p.members || "팀원 미입력"}</p></div>
                 <div className="team-badges">
-                  {p.isExample && <span className="example-badge">예시팀</span>}
+                  {p.isLiveDisplay && <span className="display-badge">화면 표시</span>}
                   <i className={active ? "active" : ""}>{active ? "작업 중" : "대기"}</i>
                 </div>
               </div>
@@ -340,7 +380,7 @@ export default function AdminPage() {
       {selected && <div className="detail-backdrop" onClick={() => setSelected(null)}>
         <aside className="detail" onClick={e => e.stopPropagation()}>
           <button className="detail-close" onClick={() => setSelected(null)}>×</button>
-          <p>TEAM {teamNumber.get(selected.code) ?? "-"}</p><h2>{selected.team}</h2><span>{selected.members || "팀원 미입력"} · {stageLabel(selected)}</span>
+          <p>DATA {teamNumber.get(selected.code) ?? "-"}</p><h2>{selected.team}</h2><span>{selected.members || "팀원 미입력"} · {stageLabel(selected)}</span>
           <Detail title="M1. 발견한 문제" text={selected.problem} />
           <Detail title="M2. 해결 아이디어" text={selected.solution} />
           {selected.result ? <><div className="service-result"><small>AI 추천 서비스</small><strong>{selected.selectedName || selected.result.serviceNames?.[0]}</strong><p>“{selected.result.slogan}”</p></div>
@@ -361,12 +401,12 @@ export default function AdminPage() {
         .live-strip{display:flex;align-items:center;gap:8px;margin-top:20px;background:#28211d;color:#fff;width:max-content;max-width:100%;border-radius:999px;padding:9px 14px;font-size:12px}
         .live-strip b{color:#ffbf87;letter-spacing:1px}.live-strip em{font-style:normal;color:#c9f4dc;border-left:1px solid #ffffff33;padding-left:9px}.live-strip small{color:#ffb4a0;margin-left:8px}.live-pulse{width:9px;height:9px;border-radius:50%;background:#3ee48f;box-shadow:0 0 0 0 #3ee48f80;animation:livePulse 1.5s infinite}
         .live-tools{border-radius:17px;margin-bottom:16px;display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(0,2fr) auto}.live-tools>div{overflow:auto;white-space:nowrap}.live-tools .team-view-filter{display:flex;gap:5px;padding-right:10px;border-right:1px solid #eadfd5}.live-tools .team-view-filter button{font-weight:900}.live-tools .team-view-filter .team-view-on{background:#28211d;color:#fff}.live-tools .stage-filter{padding-left:3px}
-        .team-selection-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;background:#fff4e8;border:1px solid #f2c49f;border-radius:17px;padding:14px 16px;margin:-4px 0 16px}.team-selection-bar>div{display:grid;gap:3px}.team-selection-bar span{color:#786b61;font-size:12px}.team-selection-bar nav{display:flex;gap:7px;flex-wrap:wrap}.team-selection-bar button{border:1px solid #ddcbb9;background:#fff;color:#4d443d;border-radius:10px;padding:10px 12px;font-weight:850;cursor:pointer}.team-selection-bar .mark-example{background:#ff5b22;border-color:#ff5b22;color:#fff}.team-selection-bar .mark-live{background:#28211d;border-color:#28211d;color:#fff}.team-selection-bar button:disabled{opacity:.45;cursor:not-allowed}
+        .team-selection-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;background:#fff4e8;border:1px solid #f2c49f;border-radius:17px;padding:14px 16px;margin:-4px 0 16px}.team-selection-bar>div{display:grid;gap:3px}.team-selection-bar span{color:#786b61;font-size:12px}.team-selection-bar nav{display:flex;gap:7px;flex-wrap:wrap}.team-selection-bar button{border:1px solid #ddcbb9;background:#fff;color:#4d443d;border-radius:10px;padding:10px 12px;font-weight:850;cursor:pointer}.team-selection-bar .mark-display{background:#ff5b22;border-color:#ff5b22;color:#fff}.team-selection-bar .unmark-display{background:#28211d;border-color:#28211d;color:#fff}.team-selection-bar .delete-selected{background:#fff;border-color:#d34b3d;color:#b42318}.team-selection-bar button:disabled{opacity:.45;cursor:not-allowed}
         .live-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
         .live-team-card{position:relative;width:100%;min-width:0;border:1px solid #e7d8c8;border-top:5px solid #c9b9aa;border-radius:22px;background:#fff;padding:20px;text-align:left;cursor:pointer;box-shadow:0 10px 30px #3b28100b;transition:.18s}
         .live-team-card:hover{transform:translateY(-2px);box-shadow:0 16px 38px #3b281018}.live-team-card.stage-3,.live-team-card.stage-4{border-top-color:#ff9d45}.live-team-card.stage-5,.live-team-card.stage-6{border-top-color:#ff5b22}.live-team-card.stage-7{border-top-color:#2e9b66}
         .live-team-card.selection-mode{padding-top:56px}.live-team-card.selected-team{border-color:#ff5b22;box-shadow:0 0 0 3px #ff5b2225,0 14px 34px #3b281015}.team-check{position:absolute;top:16px;right:17px;display:grid;place-items:center;width:28px;height:28px;border:2px solid #d8c8b9;border-radius:9px;background:#fff;color:#fff;font-size:18px;font-weight:950}.selected-team .team-check{background:#ff5b22;border-color:#ff5b22}
-        .live-card-head{display:grid;grid-template-columns:58px 1fr auto;gap:13px;align-items:center}.team-sequence{display:grid;place-items:center;width:54px;height:54px;background:#28211d;color:#fff;border-radius:17px;font-size:24px;font-weight:950}.team-sequence small{font-size:8px;letter-spacing:1px;color:#ffba8e}.live-card-head>div{min-width:0}.live-card-head>div>small{color:#9b8d81}.live-card-head h2{font-size:22px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-card-head p{margin:0;color:#81756b;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.team-badges{display:grid;justify-items:end;gap:5px}.team-badges i{font-style:normal;background:#eee7e0;color:#86796f;border-radius:99px;padding:7px 10px;font-size:11px;font-weight:850}.team-badges i.active{background:#def7e9;color:#24724a}.example-badge{background:#fff0c8;color:#9a6200;border:1px solid #f2cf79;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:950}
+        .live-card-head{display:grid;grid-template-columns:58px 1fr auto;gap:13px;align-items:center}.team-sequence{display:grid;place-items:center;width:54px;height:54px;background:#28211d;color:#fff;border-radius:17px;font-size:24px;font-weight:950}.team-sequence small{font-size:8px;letter-spacing:1px;color:#ffba8e}.live-card-head>div{min-width:0}.live-card-head>div>small{color:#9b8d81}.live-card-head h2{font-size:22px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-card-head p{margin:0;color:#81756b;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.team-badges{display:grid;justify-items:end;gap:5px}.team-badges i{font-style:normal;background:#eee7e0;color:#86796f;border-radius:99px;padding:7px 10px;font-size:11px;font-weight:850}.team-badges i.active{background:#def7e9;color:#24724a}.display-badge{background:#fff0c8;color:#9a6200;border:1px solid #f2cf79;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:950}
         .stage-line{display:flex;align-items:end;justify-content:space-between;margin-top:19px}.stage-line>div{display:grid;gap:2px}.stage-line b{font-size:10px;color:#ee5a24;letter-spacing:1px}.stage-line strong{font-size:17px}.stage-line>span{font-size:12px;color:#8c8076}.mini-progress{height:7px;background:#eee6dd;border-radius:99px;overflow:hidden;margin:9px 0 16px}.mini-progress i{display:block;height:100%;background:linear-gradient(90deg,#ff5b22,#ffc83d);border-radius:99px;transition:width .35s}
         .live-content{display:grid;grid-template-columns:1fr 1fr;gap:9px}.live-content section{min-width:0;background:#faf6f1;border-radius:13px;padding:11px}.live-content section:last-child{grid-column:1/-1}.live-content section.complete-content{background:#ebf8f0}.live-content small{display:block;color:#a05730;font-weight:900;font-size:10px;margin-bottom:5px}.live-content p{margin:0;color:#5f564e;font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}.live-team-card footer{display:flex;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid #eee4da;font-size:11px;color:#90847a}.live-team-card footer strong{color:#ee5a24}.live-empty{grid-column:1/-1;background:#fff;border:1px solid #e7d8c8;border-radius:18px}
         @keyframes livePulse{70%{box-shadow:0 0 0 7px #3ee48f00}}
