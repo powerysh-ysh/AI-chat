@@ -185,7 +185,7 @@ export default function AdminPage() {
   return (
     <main className="admin">
       <header>
-        <div><span>⚡</span><div><b>AI 창업 스튜디오</b><small>실시간 통합 운영 대시보드</small></div></div>
+        <div><Link href="/" className="admin-brand-link"><span>⚡</span><div><b>AI 창업 코치</b><small>실시간 통합 운영 대시보드</small></div></Link></div>
         <nav><Link href="/">참가자 스튜디오</Link><button onClick={() => load()}>↻ 새로고침</button><button onClick={() => { sessionStorage.removeItem("coach-admin-pin"); setSignedIn(false); }}>잠금</button></nav>
       </header>
       <section className="admin-body live-admin-body">
@@ -267,6 +267,7 @@ export default function AdminPage() {
       </div>}
 
       <style jsx global>{`
+        .admin-brand-link{display:flex;align-items:center;gap:11px;color:#fff;text-decoration:none}.admin-brand-link>div{display:grid}.admin-brand-link small{color:#d0c4bb}
         .live-admin-body{max-width:1500px}
         .live-strip{display:flex;align-items:center;gap:8px;margin-top:20px;background:#28211d;color:#fff;width:max-content;max-width:100%;border-radius:999px;padding:9px 14px;font-size:12px}
         .live-strip b{color:#ffbf87;letter-spacing:1px}.live-strip small{color:#ffb4a0;margin-left:8px}.live-pulse{width:9px;height:9px;border-radius:50%;background:#3ee48f;box-shadow:0 0 0 0 #3ee48f80;animation:livePulse 1.5s infinite}
