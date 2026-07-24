@@ -273,6 +273,13 @@ ${result.pitch}`;
     setStarted(true);
   }
 
+  function goParticipantHome() {
+    setStarted(false);
+    setPresenting(false);
+    setLoading(false);
+    setError("");
+  }
+
   async function restoreProject() {
     const team = restoreTeam.trim();
     if (team.length < 2) return setRestoreError("등록했던 팀 이름을 입력해 주세요.");
@@ -328,9 +335,11 @@ ${result.pitch}`;
   return (
     <main>
       <header className="topbar">
-        <div className="brand"><span>⚡</span><strong>AI 창업 코치</strong></div>
+        <button type="button" className="brand brand-home" onClick={goParticipantHome} aria-label="참가자 스튜디오 첫 화면으로 이동">
+          <span>⚡</span><strong>AI 창업 코치</strong>
+        </button>
         <div className="header-note">{started && form.team ? <><b>{form.team}</b> · {saveState==="saving"?"저장 중…":saveState==="saved"?"DB 저장 완료 ✓":saveState==="error"?"저장 확인 필요":"자동 저장"}</> : "지역을 이해하고, 아이디어로 해결하다"}</div>
-        <nav className="app-switch"><Link className="active" href="/">참가자 스튜디오</Link><Link href="/admin">운영 대시보드</Link><button className="ghost" onClick={reset}>새 팀 시작</button></nav>
+        <nav className="app-switch"><Link className="active" href="/" onClick={e=>{e.preventDefault();goParticipantHome();}}>참가자 스튜디오</Link><Link href="/admin">운영 대시보드</Link><button className="ghost" onClick={reset}>새 팀 시작</button></nav>
       </header>
 
       {!started ? (
@@ -372,7 +381,8 @@ ${result.pitch}`;
           <div className="progress"><i style={{width:`${progress}%`}} /></div>
           <div className="step-dots seven">{steps.map((x,i)=>{
             const unlocked = i <= 1 || (i === 2 && !!discovery) || (i === 3 && solutionCandidates.length > 0) || (i >= 4 && !!result);
-            return <button key={x} className={i===step?"on":i<step?"done":""} disabled={!unlocked} onClick={()=>unlocked&&setStep(i)}><b>{i < step ? "✓" : i+1}</b><span>{x}</span></button>;
+            const targetStep = i === 4 && result ? 5 : i;
+            return <button key={x} className={i===step?"on":i<step?"done":""} disabled={!unlocked} onClick={()=>unlocked&&setStep(targetStep)}><b>{i < step ? "✓" : i+1}</b><span>{x}</span></button>;
           })}</div>
 
           {step === 0 && <MissionCard icon="👋" coach="먼저 우리 팀을 소개해 주세요. 재미있는 팀 이름이면 발표할 때 더 기억에 남아요!">
