@@ -44,7 +44,7 @@ solution은 참가자의 원래 아이디어를 유지해 "우리 팀은 [고객
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+        model: process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini",
         input: [{ role: "user", content }],
         reasoning: { effort: "low" },
         text: { verbosity: "medium" },
@@ -52,7 +52,13 @@ solution은 참가자의 원래 아이디어를 유지해 "우리 팀은 [고객
     });
     if (!response.ok) {
       const detail = await response.text();
-      return Response.json({ error: "사진 분석에 실패했습니다. 글씨가 잘 보이도록 다시 촬영해 주세요.", detail: detail.slice(0, 500) }, { status: 502 });
+      console.error("workshop image analysis failed", response.status, detail.slice(0, 500));
+      const message = response.status === 413
+        ? "사진 용량이 큽니다. 한 장씩 다시 올려 주세요."
+        : response.status === 429
+          ? "AI 사용 한도 또는 결제 상태를 확인해 주세요."
+          : "사진 분석에 실패했습니다. 글씨가 잘 보이도록 한 장씩 다시 촬영해 주세요.";
+      return Response.json({ error: message }, { status: 502 });
     }
     return Response.json(parseJson(extractText(await response.json())));
   } catch (error) {
