@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 type Inputs = {
@@ -54,6 +54,19 @@ type WorkshopImport = {
   warnings: string[];
 };
 
+type StoredProject = {
+  code: string;
+  form: Inputs;
+  discovery: Discovery | null;
+  solutionCandidates: SolutionCandidate[];
+  selectedCandidate: number;
+  result: CoachResult | null;
+  selectedName: string;
+  workshopImport?: WorkshopImport | null;
+  step: number;
+  updatedAt?: string | null;
+};
+
 const empty: Inputs = {
   team: "",
   members: "",
@@ -63,6 +76,19 @@ const empty: Inputs = {
 };
 
 const steps = ["팀 등록", "활동지 가져오기", "AI 문제 분석", "해결안 고도화", "AI 사업화", "사업 한 장", "발표 준비"];
+
+function projectSnapshot(project: Pick<StoredProject, "form" | "discovery" | "solutionCandidates" | "selectedCandidate" | "result" | "selectedName" | "workshopImport" | "step">) {
+  return JSON.stringify({
+    form: project.form,
+    discovery: project.discovery ?? null,
+    solutionCandidates: project.solutionCandidates ?? [],
+    selectedCandidate: project.selectedCandidate ?? -1,
+    result: project.result ?? null,
+    selectedName: project.selectedName ?? "",
+    workshopImport: project.workshopImport ?? null,
+    step: Number(project.step) || 0,
+  });
+}
 
 export default function Home() {
   const [started, setStarted] = useState(false);
@@ -87,6 +113,13 @@ export default function Home() {
   const [restoreError, setRestoreError] = useState("");
   const [workshopImport, setWorkshopImport] = useState<WorkshopImport | null>(null);
   const [imageNames, setImageNames] = useState<string[]>([]);
+  const [collabMessage, setCollabMessage] = useState("팀 공동 작업 · 3초 동기화");
+  const lastSyncedSnapshotRef = useRef("");
+  const lastServerUpdatedAtRef = useRef("");
+
+  const currentSnapshot = useMemo(() => projectSnapshot({
+    form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step,
+  }), [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step]);
 
   useEffect(() => {
     const saved = localStorage.getItem("local-hero-project");
@@ -114,6 +147,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!started || !form.team.trim() || !/^\d{4}$/.test(teamPin)) return;
+    if (currentSnapshot === lastSyncedSnapshotRef.current) return;
     queueMicrotask(() => setSaveState("saving"));
     const timer = window.setTimeout(async () => {
       try {
@@ -125,7 +159,10 @@ export default function Home() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "팀 정보를 저장하지 못했습니다.");
         if (!projectCode && data.code) setProjectCode(data.code);
+        lastSyncedSnapshotRef.current = currentSnapshot;
+        if (data.updatedAt) lastServerUpdatedAtRef.current = data.updatedAt;
         setSaveState("saved");
+        setCollabMessage("공동 작업 저장 완료 ✓");
         setError("");
       } catch (e) {
         setSaveState("error");
@@ -133,7 +170,42 @@ export default function Home() {
       }
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [started, projectCode, teamPin, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step]);
+  }, [started, projectCode, teamPin, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step, currentSnapshot]);
+
+  useEffect(() => {
+    if (!started || !form.team.trim() || !/^\d{4}$/.test(teamPin)) return;
+    let cancelled = false;
+
+    const syncTeam = async () => {
+      if (loading || saveState === "saving") return;
+      if (lastSyncedSnapshotRef.current && currentSnapshot !== lastSyncedSnapshotRef.current) return;
+      try {
+        const response = await fetch(`/api/projects?team=${encodeURIComponent(form.team)}&pin=${encodeURIComponent(teamPin)}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok || cancelled || !data.project) return;
+        const remote = data.project as StoredProject;
+        const remoteStep = remote.result ? Math.max(5, Number(remote.step) || 0) : Number(remote.step) || 0;
+        const remoteSnapshot = projectSnapshot({ ...remote, step: remoteStep });
+        if (remote.updatedAt && remote.updatedAt === lastServerUpdatedAtRef.current) return;
+        lastServerUpdatedAtRef.current = remote.updatedAt ?? "";
+        if (remoteSnapshot === lastSyncedSnapshotRef.current) return;
+        applyStoredProject(remote, teamPin, false);
+        setCollabMessage("다른 팀원의 수정 내용을 반영했습니다 ✓");
+      } catch {
+        // 자동 동기화 실패는 다음 3초 주기에 다시 시도합니다.
+      }
+    };
+
+    const timer = window.setInterval(() => void syncTeam(), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+    // 같은 팀의 최신 DB 상태를 현재 로컬 상태와 비교합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [started, form.team, teamPin, loading, saveState, currentSnapshot]);
 
   useEffect(() => {
     if (!running || seconds <= 0) return;
@@ -294,20 +366,44 @@ ${result.pitch}`;
       const response = await fetch(`/api/projects?team=${encodeURIComponent(team)}&pin=${encodeURIComponent(restorePin)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "팀을 찾을 수 없습니다.");
-      setForm(data.project.form);
-      setDiscovery(data.project.discovery ?? null);
-      setSolutionCandidates(data.project.solutionCandidates ?? []);
-      setSelectedCandidate(data.project.selectedCandidate ?? -1);
-      setResult(data.project.result);
-      setSelectedName(data.project.selectedName);
-      setWorkshopImport(data.project.workshopImport ?? null);
-      setProjectCode(data.project.code);
-      setTeamPin(restorePin);
-      setStep(data.project.result ? Math.max(5, data.project.step) : data.project.step);
-      setStarted(true);
+      applyStoredProject(data.project as StoredProject, restorePin, true);
+      setCollabMessage("팀 공동 작업에 연결되었습니다 ✓");
     } catch (e) {
       setRestoreError(e instanceof Error ? e.message : "팀을 찾을 수 없습니다.");
     }
+  }
+
+  function applyStoredProject(project: StoredProject, pin: string, start: boolean) {
+    const nextForm = { ...empty, ...project.form };
+    const nextDiscovery = project.discovery ?? null;
+    const nextCandidates = project.solutionCandidates ?? [];
+    const nextCandidate = project.selectedCandidate ?? -1;
+    const nextResult = project.result ?? null;
+    const nextName = project.selectedName ?? "";
+    const nextWorkshop = project.workshopImport ?? null;
+    const nextStep = nextResult ? Math.max(5, Number(project.step) || 0) : Number(project.step) || 0;
+    lastSyncedSnapshotRef.current = projectSnapshot({
+      form: nextForm,
+      discovery: nextDiscovery,
+      solutionCandidates: nextCandidates,
+      selectedCandidate: nextCandidate,
+      result: nextResult,
+      selectedName: nextName,
+      workshopImport: nextWorkshop,
+      step: nextStep,
+    });
+    lastServerUpdatedAtRef.current = project.updatedAt ?? "";
+    setForm(nextForm);
+    setDiscovery(nextDiscovery);
+    setSolutionCandidates(nextCandidates);
+    setSelectedCandidate(nextCandidate);
+    setResult(nextResult);
+    setSelectedName(nextName);
+    setWorkshopImport(nextWorkshop);
+    setProjectCode(project.code);
+    setTeamPin(pin);
+    setStep(nextStep);
+    if (start) setStarted(true);
   }
 
   async function copyAll() {
@@ -343,7 +439,7 @@ ${result.pitch}`;
         <button type="button" className="brand brand-home" onClick={goParticipantHome} aria-label="참가자 스튜디오 첫 화면으로 이동">
           <span>⚡</span><strong>AI 창업 코치</strong>
         </button>
-        <div className="header-note">{started && form.team ? <><b>{form.team}</b> · {saveState==="saving"?"저장 중…":saveState==="saved"?"DB 저장 완료 ✓":saveState==="error"?"저장 확인 필요":"자동 저장"}</> : "지역을 이해하고, 아이디어로 해결하다"}</div>
+        <div className="header-note">{started && form.team ? <><b>{form.team}</b> · {saveState==="saving"?"저장 중…":saveState==="error"?"저장 확인 필요":collabMessage}</> : "지역을 이해하고, 아이디어로 해결하다"}</div>
         <nav className="app-switch"><Link className="active" href="/" onClick={e=>{e.preventDefault();goParticipantHome();}}>참가자 스튜디오</Link><Link href="/admin">운영 대시보드</Link><button className="ghost" onClick={reset}>새 팀 시작</button></nav>
       </header>
 
@@ -357,7 +453,7 @@ ${result.pitch}`;
             <p className="lead">M1 문제정의와 M2 해결 아이디어 활동지를 촬영하세요.<br/>AI가 내용을 정리하고 사업모델과 3분 발표자료까지 연결합니다.</p>
             <button className="primary big" onClick={begin}>새 팀 미션 시작 →</button>
             {result && <button className="resume" onClick={() => { setStarted(true); setStep(5); }}>저장된 결과 이어보기</button>}
-            <p className="micro">팀별 스마트폰 또는 노트북 한 대면 충분해요 · 자동 저장됩니다</p>
+            <p className="micro">여러 팀원이 같은 팀에 접속할 수 있어요 · 작성 내용은 3초마다 공동 동기화됩니다</p>
             <div className="restore-box">
               <b>기존 팀 작업을 이어서 하나요?</b>
               <div className="restore-fields">
@@ -366,7 +462,7 @@ ${result.pitch}`;
                 <button onClick={restoreProject}>팀 불러오기</button>
               </div>
               {restoreError && <small>{restoreError}</small>}
-              <small>같은 이름의 팀이 없도록 팀 이름을 정확히 입력해 주세요.</small>
+              <small>팀원은 같은 팀 이름과 비밀번호로 불러오면 함께 볼 수 있습니다. 같은 항목을 동시에 수정하면 마지막 저장 내용이 반영됩니다.</small>
             </div>
           </div>
           <div className="hero-visual">
@@ -381,7 +477,7 @@ ${result.pitch}`;
         <section className="workspace shell">
           <div className="mission-head">
             <div><span className="mission-label">M3 · AI 창업 스튜디오</span><h1>{loading ? "AI 코치가 우리 팀의 사업을 설계하고 있어요…" : steps[step]}</h1></div>
-            <div className="team-code"><small>우리 팀</small><strong>{form.team || "팀 이름 등록 전"}</strong><span>{saveState==="saving"?"DB 저장 중…":saveState==="saved"?"저장 완료 ✓":saveState==="error"?"저장 실패 · 인터넷 확인":"팀 이름으로 자동 저장"}</span></div>
+            <div className="team-code"><small>우리 팀 · 공동 작업</small><strong>{form.team || "팀 이름 등록 전"}</strong><span>{saveState==="saving"?"DB 저장 중…":saveState==="error"?"저장 실패 · 인터넷 확인":collabMessage}</span></div>
           </div>
           <div className="progress"><i style={{width:`${progress}%`}} /></div>
           <div className="step-dots seven">{steps.map((x,i)=>{
@@ -394,7 +490,7 @@ ${result.pitch}`;
             <Field label="우리 팀 이름" value={form.team} placeholder="예: 좌충우돌 로컬 히어로" onChange={v=>setForm({...form,team:v})}/>
             <Field label="팀 비밀번호 숫자 4자리" value={teamPin} placeholder="예: 2580" type="password" inputMode="numeric" maxLength={4} onChange={v=>setTeamPin(v.replace(/\D/g,"").slice(0,4))}/>
             <Field label="팀원 이름 (선택)" value={form.members} placeholder="예: 김로컬, 이히어로, 박매니저" onChange={v=>setForm({...form,members:v})}/>
-            <p className="formula">🔐 작업을 다시 불러올 때 팀 이름과 비밀번호 4자리가 필요합니다. 다른 팀과 겹치지 않는 이름을 사용해 주세요.</p>
+            <p className="formula">👥 팀원은 같은 팀 이름과 비밀번호 4자리로 접속하면 작성 내용을 함께 보고 이어서 수정할 수 있습니다. 비밀번호는 팀원끼리만 공유해 주세요.</p>
             {error && <p className="error">{error}</p>}
             <Next disabled={!form.team.trim() || !/^\d{4}$/.test(teamPin)} onClick={()=>setStep(1)} />
           </MissionCard>}
