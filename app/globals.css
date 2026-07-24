@@ -28,3 +28,4 @@
 
 @media(max-width:850px){.candidate-grid{grid-template-columns:1fr}.insight-grid{grid-template-columns:1fr}.order-head{align-items:flex-start;flex-direction:column}.order-list{grid-template-columns:1fr}.mission-rail.seven strong{font-size:10px}}
 @media(max-width:520px){.mission-rail.seven{grid-template-columns:repeat(4,1fr);row-gap:10px}.admin-title{display:grid}.admin-actions{margin-top:12px}.order-head>div:last-child{display:grid;width:100%}}
+.privacy-note{margin:-15px 0 15px;color:#756a60;background:#f5f1ec;border-radius:10px;padding:9px 12px;font-size:12px}
