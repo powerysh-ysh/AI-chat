@@ -47,6 +47,13 @@ type SolutionCandidate = {
   feasibility: string;
 };
 
+type WorkshopImport = {
+  problem: string;
+  solution: string;
+  extractedNotes: string[];
+  warnings: string[];
+};
+
 const empty: Inputs = {
   team: "",
   members: "",
@@ -55,7 +62,7 @@ const empty: Inputs = {
   tone: "재미있고 유쾌하게",
 };
 
-const steps = ["팀 등록", "문제 씨앗", "AI 문제 분석", "해결안 발산", "AI 사업화", "사업 한 장", "발표 준비"];
+const steps = ["팀 등록", "활동지 가져오기", "AI 문제 분석", "해결안 고도화", "AI 사업화", "사업 한 장", "발표 준비"];
 
 export default function Home() {
   const [started, setStarted] = useState(false);
@@ -76,6 +83,8 @@ export default function Home() {
   const [restoreCode, setRestoreCode] = useState("");
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
   const [restoreError, setRestoreError] = useState("");
+  const [workshopImport, setWorkshopImport] = useState<WorkshopImport | null>(null);
+  const [imageNames, setImageNames] = useState<string[]>([]);
 
   useEffect(() => {
     const saved = localStorage.getItem("local-hero-project");
@@ -90,14 +99,15 @@ export default function Home() {
           setSelectedCandidate(parsed.selectedCandidate ?? -1);
           setSelectedName(parsed.selectedName ?? "");
           setProjectCode(parsed.projectCode ?? "");
+          setWorkshopImport(parsed.workshopImport ?? null);
         });
       } catch {}
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("local-hero-project", JSON.stringify({ form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode }));
-  }, [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode]);
+    localStorage.setItem("local-hero-project", JSON.stringify({ form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, workshopImport }));
+  }, [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, workshopImport]);
 
   useEffect(() => {
     if (!started || !projectCode || !form.team.trim()) return;
@@ -107,7 +117,7 @@ export default function Home() {
         const response = await fetch("/api/projects", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code: projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, step }),
+          body: JSON.stringify({ code: projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step }),
         });
         if (!response.ok) throw new Error();
         setSaveState("saved");
@@ -116,7 +126,7 @@ export default function Home() {
       }
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [started, projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, step]);
+  }, [started, projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step]);
 
   useEffect(() => {
     if (!running || seconds <= 0) return;
@@ -169,7 +179,7 @@ ${result.pitch}`;
     try {
       const response = await fetch("/api/ideate", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "analyze", team: form.team, problem: form.problem }),
+        body: JSON.stringify({ mode: "analyze", team: form.team, problem: form.problem, solutionSeed: form.solution }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "문제를 분석하지 못했습니다.");
@@ -179,13 +189,41 @@ ${result.pitch}`;
     } finally { setLoading(false); }
   }
 
+  async function importWorkshopSheets(files: FileList | null) {
+    if (!files?.length) return;
+    const selected = Array.from(files).slice(0, 2);
+    setLoading(true);
+    setError("");
+    setImageNames(selected.map(file => file.name));
+    try {
+      const images = await Promise.all(selected.map(fileToDataUrl));
+      const response = await fetch("/api/extract-workshop", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ images }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "활동지를 읽지 못했습니다.");
+      setWorkshopImport(data);
+      setForm(current => ({
+        ...current,
+        problem: data.problem || current.problem,
+        solution: data.solution || current.solution,
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "사진을 다시 촬영해 주세요.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function generateSolutions() {
     if (!discovery) return;
     setLoading(true); setError(""); setStep(3);
     try {
       const response = await fetch("/api/ideate", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "solutions", team: form.team, problem: form.problem, discovery }),
+        body: JSON.stringify({ mode: "solutions", team: form.team, problem: form.problem, solutionSeed: form.solution, discovery }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "해결안을 만들지 못했습니다.");
@@ -205,7 +243,7 @@ ${result.pitch}`;
 
   function reset() {
     if (!confirm("현재 팀의 내용을 지우고 새로 시작할까요?")) return;
-    setForm(empty); setDiscovery(null); setSolutionCandidates([]); setSelectedCandidate(-1); setResult(null); setSelectedName(""); setProjectCode(""); setStarted(false); setStep(0);
+    setForm(empty); setDiscovery(null); setSolutionCandidates([]); setSelectedCandidate(-1); setResult(null); setSelectedName(""); setProjectCode(""); setWorkshopImport(null); setImageNames([]); setStarted(false); setStep(0);
     localStorage.removeItem("local-hero-project");
   }
 
@@ -232,6 +270,7 @@ ${result.pitch}`;
       setSelectedCandidate(data.project.selectedCandidate ?? -1);
       setResult(data.project.result);
       setSelectedName(data.project.selectedName);
+      setWorkshopImport(data.project.workshopImport ?? null);
       setProjectCode(data.project.code);
       setStep(data.project.result ? Math.max(5, data.project.step) : data.project.step);
       setStarted(true);
@@ -281,8 +320,8 @@ ${result.pitch}`;
             <div className="badges"><span>🏆 로컬 히어로 미션</span><span>⏱ 60분 완성</span></div>
             <p className="eyebrow">M3. AI와 함께 사업화하기</p>
             <h1><em>AI</em> 창업 스튜디오</h1>
-            <h2>두 문장으로 시작해 <strong>사업 한 장</strong> 완성!</h2>
-            <p className="lead">M1의 문제 문장과 M2의 해결 문장을 준비하세요.<br/>AI 코치가 서비스명부터 3분 발표문까지 함께 만듭니다.</p>
+            <h2>활동지 사진으로 시작해 <strong>사업 한 장</strong> 완성!</h2>
+            <p className="lead">M1 문제정의와 M2 해결 아이디어 활동지를 촬영하세요.<br/>AI가 내용을 정리하고 사업모델과 3분 발표자료까지 연결합니다.</p>
             <button className="primary big" onClick={begin}>새 팀 미션 시작 →</button>
             {result && <button className="resume" onClick={() => { setStarted(true); setStep(5); }}>저장된 결과 이어보기</button>}
             <p className="micro">팀별 스마트폰 또는 노트북 한 대면 충분해요 · 자동 저장됩니다</p>
@@ -318,13 +357,29 @@ ${result.pitch}`;
             <Next disabled={!form.team.trim()} onClick={()=>setStep(1)} />
           </MissionCard>}
 
-          {step === 1 && <MissionCard icon="🔎" coach="M1에서 완성한 ‘문제 한 문장’을 그대로 옮겨 적으세요. 누가, 어떤 상황에서, 왜 불편한지가 보이면 좋아요.">
-            <label className="field-label">M1. 우리가 발견한 지역 문제</label>
+          {step === 1 && <MissionCard icon="📷" coach="M1·M2 활동지를 촬영하면 AI가 문제와 해결 아이디어를 읽어 정리합니다. AI가 잘못 읽을 수 있으니 반드시 팀이 확인해 주세요.">
+            <div className="sheet-upload">
+              <div><b>① M1·M2 활동지 사진 올리기</b><span>최대 2장 · 사진 원본은 저장하지 않습니다</span></div>
+              <label className={loading ? "disabled" : ""}>
+                <input type="file" accept="image/*" capture="environment" multiple disabled={loading} onChange={e=>importWorkshopSheets(e.target.files)}/>
+                {loading ? "AI가 활동지를 읽는 중…" : "📷 촬영 또는 사진 선택"}
+              </label>
+              {!!imageNames.length && <small>선택됨: {imageNames.join(", ")}</small>}
+            </div>
+            {workshopImport && <div className="import-review">
+              <b>AI가 사진에서 읽은 내용</b>
+              <p>아래 문장을 팀의 실제 의도와 비교해 수정하세요.</p>
+              {!!workshopImport.extractedNotes?.length && <details><summary>인식한 메모·포스트잇 보기</summary>{workshopImport.extractedNotes.map((x,i)=><span key={`${x}-${i}`}>{i+1}. {x}</span>)}</details>}
+              {!!workshopImport.warnings?.length && <div className="import-warning">확인 필요: {workshopImport.warnings.join(" · ")}</div>}
+            </div>}
+            {error && <p className="error">{error}</p>}
+            <label className="field-label">② M1. 우리가 발견한 지역 문제</label>
             <textarea className="big-input" value={form.problem} onChange={e=>setForm({...form,problem:e.target.value})} placeholder="예: 부산을 처음 찾은 외국인 관광객이 전통시장에서 메뉴를 이해하기 어려워 주문할 때 불편을 겪고 있다."/>
+            <label className="field-label tone-label">③ M2. 우리 팀이 선택한 해결 아이디어</label>
+            <textarea className="big-input" value={form.solution} onChange={e=>setForm({...form,solution:e.target.value})} placeholder="예: 외국인 관광객이 시장 음식과 알레르기 정보를 확인하고 상인과 소통할 수 있도록 돕는 체험 안내 서비스를 만든다."/>
             <p className="privacy-note">🔒 이 내용은 AI 분석에 사용됩니다. 이름·전화번호·주소 등 개인을 알아볼 수 있는 정보는 입력하지 마세요.</p>
-            <div className="formula">💡 <strong>문장 공식</strong>　[어떤 사람]이 [어떤 상황]에서 [무엇 때문에] 불편을 겪고 있다.</div>
-            <div className="idea-hints"><b>막막하다면 이렇게 적어도 됩니다</b><span>“버스를 기다릴 때 시간이 안 보여 답답했다.”</span><span>“시장에 갔는데 처음 온 사람은 주문하기 어려워 보였다.”</span></div>
-            <Nav onBack={()=>setStep(0)} disabled={!form.problem.trim()} onNext={analyzeProblem} nextLabel="AI로 문제 분석하기 ✨" />
+            <div className="formula">✅ <strong>팀 확인</strong>　AI가 읽은 문장이 우리 의도와 같은가? · 고객과 상황이 보이는가? · 해결방법이 구체적인가?</div>
+            <Nav onBack={()=>setStep(0)} disabled={!form.problem.trim() || !form.solution.trim()} onNext={analyzeProblem} nextLabel="확인 완료 · AI 문제 분석 →" />
           </MissionCard>}
 
           {step === 2 && <MissionCard icon="🧭" coach="아이디어보다 먼저 ‘진짜 문제’를 찾아야 해요. AI 분석을 팀 경험과 비교하고 틀린 부분은 직접 고쳐 주세요.">
@@ -342,13 +397,14 @@ ${result.pitch}`;
             </> : <><p className="error">{error}</p><button className="primary" onClick={analyzeProblem}>문제 다시 분석하기</button></>}
           </MissionCard>}
 
-          {step === 3 && <MissionCard icon="💡" coach="정답 하나를 바로 찾지 말고, 접근 방식이 다른 세 가지 길을 비교해 보세요. 마음에 드는 안을 고른 뒤 팀의 말로 수정합니다.">
+          {step === 3 && <MissionCard icon="💡" coach="M2에서 만든 해결안을 버리는 단계가 아닙니다. 원안을 기준으로 AI가 보완한 세 가지 사업화 방향을 비교하고 팀이 최종 결정합니다.">
             {loading ? <InlineLoading text="디지털·사람 연결·체험 방식으로 해결안을 넓히고 있어요…"/> : <>
               <div className="candidate-grid">{solutionCandidates.map((candidate,i)=><button type="button" key={`${candidate.title}-${i}`} className={`candidate ${selectedCandidate===i?"selected":""}`} onClick={()=>chooseCandidate(candidate,i)}>
                 <span>{i+1}안 · {candidate.type}</span><h3>{candidate.title}</h3><p>{candidate.description}</p><small><b>고객 변화</b>{candidate.value}</small><small><b>작은 실험</b>{candidate.feasibility}</small><strong>{selectedCandidate===i?"✓ 우리 팀 선택":"이 아이디어 선택"}</strong>
               </button>)}</div>
               {error && <p className="error">{error}</p>}
-              <label className="field-label tone-label">선택한 해결 문장을 팀의 말로 다듬기</label>
+              <div className="m2-original"><b>📌 M2에서 가져온 우리 팀 원안</b><p>{workshopImport?.solution || form.solution}</p></div>
+              <label className="field-label tone-label">최종 해결 문장을 팀의 말로 다듬기</label>
               <textarea className="big-input compact" value={form.solution} onChange={e=>setForm({...form,solution:e.target.value})} placeholder="해결안을 선택해 주세요."/>
               <div className="formula">✅ <strong>선택 기준</strong>　고객이 정말 원하는가? · 우리 팀이 작게 시험할 수 있는가? · 기존 방식보다 나은가?</div>
               <label className="field-label tone-label">발표 분위기를 골라 주세요</label>
@@ -425,8 +481,22 @@ function Nav({onBack,onNext,disabled,nextLabel="다음 미션 →"}:{onBack:()=>
   return <div className="nav"><button className="back" onClick={onBack}>← 이전</button><button className="primary" disabled={disabled} onClick={onNext}>{nextLabel}</button></div>
 }
 function Editable({title,value,onChange,className=""}:{title:string;value:string;onChange:(v:string)=>void;className?:string}) {
-  return <label className={`editable ${className}`}><b>{title}</b><textarea value={value} onChange={e=>onChange(e.target.value)}/><small>눌러서 수정</small></label>
+  return <label className={`editable ${className}`}><b>{title}</b><textarea rows={Math.max(2, Math.ceil(value.length / 34))} value={value} onChange={e=>onChange(e.target.value)}/><small>눌러서 수정</small></label>
 }
 function InlineLoading({text}:{text:string}) {
   return <div className="inline-loading"><div>🤖</div><b>{text}</b><span><i/></span></div>;
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  if (file.size > 10 * 1024 * 1024) throw new Error("사진 한 장은 10MB 이하로 올려 주세요.");
+  const source = await createImageBitmap(file);
+  const scale = Math.min(1, 1800 / Math.max(source.width, source.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("사진을 처리하지 못했습니다.");
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
+  source.close();
+  return canvas.toDataURL("image/jpeg", .82);
 }
