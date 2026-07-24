@@ -194,6 +194,8 @@ ${result.pitch}`;
     const selected = Array.from(files).slice(0, 2);
     setLoading(true);
     setError("");
+    setWorkshopImport(null);
+    setForm(current => ({ ...current, problem: "", solution: "" }));
     setImageNames(selected.map(file => file.name));
     try {
       const images = await Promise.all(selected.map(fileToDataUrl));
@@ -248,11 +250,20 @@ ${result.pitch}`;
   }
 
   function begin() {
-    if (!projectCode) {
-      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      const bytes = crypto.getRandomValues(new Uint8Array(8));
-      setProjectCode(Array.from(bytes, b => alphabet[b % alphabet.length]).join(""));
-    }
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    setForm(empty);
+    setDiscovery(null);
+    setSolutionCandidates([]);
+    setSelectedCandidate(-1);
+    setResult(null);
+    setSelectedName("");
+    setWorkshopImport(null);
+    setImageNames([]);
+    setError("");
+    setStep(0);
+    setProjectCode(Array.from(bytes, b => alphabet[b % alphabet.length]).join(""));
+    localStorage.removeItem("local-hero-project");
     setStarted(true);
   }
 
