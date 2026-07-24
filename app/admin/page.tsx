@@ -26,6 +26,7 @@ type Project = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  presentationOrder?: number | null;
 };
 
 export default function AdminPage() {
@@ -37,6 +38,9 @@ export default function AdminPage() {
   const [status, setStatus] = useState("전체");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [orderMode, setOrderMode] = useState(false);
+  const [presentationOrder, setPresentationOrder] = useState<Project[]>([]);
+  const [orderMessage, setOrderMessage] = useState("");
 
   useEffect(() => {
     const saved = sessionStorage.getItem("coach-admin-pin");
@@ -52,6 +56,7 @@ export default function AdminPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "불러오지 못했습니다.");
       setProjects(data.projects);
+      setPresentationOrder([...data.projects].filter((p:Project)=>p.result).sort((a:Project,b:Project)=>(a.presentationOrder??999)-(b.presentationOrder??999)));
       setSignedIn(true);
       sessionStorage.setItem("coach-admin-pin", secret);
     } catch (e) {
@@ -82,6 +87,40 @@ export default function AdminPage() {
     URL.revokeObjectURL(a.href);
   }
 
+  function createRandomOrder() {
+    const ready = projects.filter(p => p.result);
+    for (let i = ready.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ready[i], ready[j]] = [ready[j], ready[i]];
+    }
+    setPresentationOrder(ready);
+    setOrderMode(true);
+    setOrderMessage("무작위 순서를 만들었습니다. 위·아래로 조정한 뒤 저장하세요.");
+  }
+
+  function moveTeam(index:number, direction:-1|1) {
+    const next = [...presentationOrder];
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    setPresentationOrder(next);
+  }
+
+  async function saveOrder() {
+    setLoading(true); setOrderMessage("");
+    try {
+      const response = await fetch("/api/admin/projects", {
+        method: "POST", headers: { "content-type":"application/json", "x-admin-pin":pin },
+        body: JSON.stringify({ order:presentationOrder.map(p=>p.code) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "저장하지 못했습니다.");
+      setOrderMessage(`${presentationOrder.length}개 팀의 발표 순서를 DB에 저장했습니다. ✓`);
+      await load();
+    } catch (e) { setOrderMessage(e instanceof Error ? e.message : "저장하지 못했습니다."); }
+    finally { setLoading(false); }
+  }
+
   if (!signedIn) return (
     <main className="admin-login">
       <Link href="/" className="admin-home">← 참가자 스튜디오</Link>
@@ -103,13 +142,19 @@ export default function AdminPage() {
         <nav><Link href="/">참가자 스튜디오</Link><button onClick={()=>load()}>↻ 새로고침</button><button onClick={()=>{sessionStorage.removeItem("coach-admin-pin");setSignedIn(false)}}>잠금</button></nav>
       </header>
       <section className="admin-body">
-        <div className="admin-title"><div><p>M3 LIVE CONTROL</p><h1>로컬 히어로 팀 현황</h1><span>팀의 저장 내용과 사업화 진행 상황을 실시간으로 확인합니다.</span></div><button onClick={exportCsv}>↓ CSV 내려받기</button></div>
+        <div className="admin-title"><div><p>M3 LIVE CONTROL</p><h1>로컬 히어로 팀 현황</h1><span>팀의 저장 내용과 사업화 진행 상황을 실시간으로 확인합니다.</span></div><div className="admin-actions"><button onClick={()=>setOrderMode(x=>!x)}>🎤 발표 순서</button><button onClick={exportCsv}>↓ CSV</button></div></div>
         <div className="stat-grid">
           <article><span>참여 팀</span><strong>{projects.length}</strong><small>전체 등록 팀</small></article>
           <article><span>오늘 활동</span><strong>{activeToday}</strong><small>24시간 내 저장</small></article>
           <article><span>사업화 완료</span><strong>{completed}</strong><small>AI 결과 생성</small></article>
           <article className="rate"><span>완성률</span><strong>{projects.length ? Math.round(completed/projects.length*100) : 0}%</strong><i><b style={{width:`${projects.length ? completed/projects.length*100 : 0}%`}}/></i></article>
         </div>
+        {orderMode && <section className="order-panel">
+          <div className="order-head"><div><span>LOCAL HERO PITCH</span><h2>발표 순서 정하기</h2><p>사업화를 완료한 팀만 자동으로 모았습니다.</p></div><div><button onClick={createRandomOrder}>🎲 무작위 다시 뽑기</button><button className="save-order" onClick={saveOrder} disabled={loading||presentationOrder.length===0}>{loading?"저장 중…":"순서 DB 저장"}</button></div></div>
+          {presentationOrder.length===0 ? <p className="order-empty">아직 사업화를 완료한 팀이 없습니다.</p> :
+          <div className="order-list">{presentationOrder.map((p,i)=><div key={p.code}><strong>{i+1}</strong><span><b>{p.team}</b><small>{p.selectedName || p.result?.serviceNames?.[0] || "서비스명 선택 전"} · {p.code}</small></span><nav><button onClick={()=>moveTeam(i,-1)} disabled={i===0}>↑</button><button onClick={()=>moveTeam(i,1)} disabled={i===presentationOrder.length-1}>↓</button></nav></div>)}</div>}
+          {orderMessage && <p className="order-message">{orderMessage}</p>}
+        </section>}
         <div className="admin-tools">
           <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="🔎 팀명·팀 코드·문제 검색"/>
           <div>{["전체","팀 등록","문제 작성","해결책 작성","사업화 완료"].map(x=><button key={x} className={status===x?"on":""} onClick={()=>setStatus(x)}>{x}</button>)}</div>
