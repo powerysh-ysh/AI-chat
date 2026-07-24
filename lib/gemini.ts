@@ -38,21 +38,31 @@ export function parseAiJson(text: string) {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+function upstreamMessage(detail: string) {
+  try {
+    const parsed = JSON.parse(detail) as { error?: { message?: string } };
+    return parsed.error?.message?.replace(/API key[^.]*\.?/gi, "API 키 ").slice(0, 240) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export async function callGeminiJson({ prompt, images = [], useSearch = false }: GeminiOptions) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY가 없습니다.");
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
   const parts: GeminiPart[] = [
     { text: prompt },
     ...images.map(parseDataUrl),
   ];
+  const generationConfig: Record<string, unknown> = { temperature: 0.35 };
+  // Google Search 도구와 JSON MIME 강제 설정은 일부 Gemini 모델에서 충돌합니다.
+  if (!useSearch) generationConfig.responseMimeType = "application/json";
+
   const body: Record<string, unknown> = {
     contents: [{ role: "user", parts }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.35,
-    },
+    generationConfig,
   };
   if (useSearch) body.tools = [{ google_search: {} }];
 
@@ -67,15 +77,17 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
   if (!response.ok) {
     const detail = await response.text();
     console.error("Gemini request failed", response.status, detail.slice(0, 700));
-    const error = new Error(
-      response.status === 429
-        ? "Gemini 사용 한도를 확인해 주세요."
-        : response.status === 400
-          ? "Gemini 모델명 또는 요청 설정을 확인해 주세요."
-          : response.status === 403
-            ? "Gemini API 키 권한을 확인해 주세요."
-            : "Gemini 호출에 실패했습니다.",
-    );
+    const providerMessage = upstreamMessage(detail);
+    const message = response.status === 429
+      ? "Gemini 무료 사용 한도 또는 결제 상태를 확인해 주세요."
+      : response.status === 400
+        ? `Gemini 요청 설정 오류입니다.${providerMessage ? ` ${providerMessage}` : ""}`
+        : response.status === 401 || response.status === 403
+          ? "Gemini API 키가 올바르지 않거나 프로젝트 사용 권한이 없습니다."
+          : response.status === 404
+            ? `Gemini 모델 '${model}'을 찾을 수 없습니다. GEMINI_MODEL 값을 확인해 주세요.`
+            : `Gemini 호출에 실패했습니다.${providerMessage ? ` ${providerMessage}` : ""}`;
+    const error = new Error(message);
     (error as Error & { status?: number }).status = response.status;
     throw error;
   }

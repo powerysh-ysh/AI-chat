@@ -24,8 +24,8 @@ export async function POST(request: Request) {
   }
 
   const mode = input.mode === "solutions" ? "solutions" : "analyze";
-  const openAiKey = process.env.OPENAI_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
   if (!openAiKey && !geminiKey) {
     return Response.json({ error: "Vercel에 GEMINI_API_KEY 또는 OPENAI_API_KEY를 등록해 주세요.", code: "AI_NOT_CONFIGURED" }, { status: 503 });
   }
@@ -52,6 +52,7 @@ M2 원안을 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요. 첫
 반드시 JSON 하나만 출력:
 {"candidates":[{"title":"이름","type":"방식","description":"누구의 어떤 문제를 어떻게 해결하는지","value":"고객이 얻는 변화","feasibility":"작은 시험 방법"}],"recommendation":0}`;
 
+  let geminiError = "";
   try {
     if (geminiKey) {
       try {
@@ -61,6 +62,7 @@ M2 원안을 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요. 첫
         }));
       } catch (error) {
         console.error("Gemini ideation failed", error);
+        geminiError = error instanceof Error ? error.message : "Gemini 분석에 실패했습니다.";
         if (!openAiKey) throw error;
       }
     }
@@ -76,11 +78,18 @@ M2 원안을 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요. 첫
         text: { verbosity: "medium" },
       }),
     });
-    if (!response.ok) return Response.json({ error: "AI 검색·분석에 실패했습니다." }, { status: 502 });
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error("OpenAI ideation failed", response.status, detail.slice(0, 500));
+      const fallbackMessage = response.status === 429
+        ? "OpenAI 사용 한도 또는 결제 상태를 확인해 주세요."
+        : "OpenAI 분석에도 실패했습니다.";
+      return Response.json({ error: geminiError || fallbackMessage }, { status: 502 });
+    }
     const raw = extractText(await response.json()).replace(/^```json\s*|\s*```$/g, "");
     return Response.json(JSON.parse(raw));
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "AI 분석 오류" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "AI 분석 오류" }, { status: 502 });
   }
 }
 import { callGeminiJson } from "@/lib/gemini";
