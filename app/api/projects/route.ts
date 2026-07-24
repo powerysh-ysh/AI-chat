@@ -11,6 +11,7 @@ type Payload = {
   selectedCandidate?: number;
   result?: unknown;
   selectedName?: string;
+  workshopImport?: unknown;
   step?: number;
 };
 
@@ -90,6 +91,7 @@ export async function GET(request: Request) {
       discovery: row.discovery ?? null, solutionCandidates: row.solutionCandidates ?? [],
       selectedCandidate: row.selectedCandidate ?? -1,
       result: row.result ?? null, selectedName: row.selectedName ?? "", step: row.step ?? 0,
+      workshopImport: row.workshopImport ?? null,
       presentationOrder: row.presentationOrder ?? null,
       status: row.status ?? "팀 등록", updatedAt: toDate(row.updatedAt),
     }});
@@ -112,18 +114,20 @@ export async function POST(request: Request) {
       return Response.json({ error: "이미 등록된 팀 이름이거나 팀 비밀번호가 다릅니다." }, { status: 401 });
     }
     const step = Math.max(0, Math.min(6, Number(payload.step) || 0));
+    const updatedAt = Timestamp.now();
     await ref.set({
       code, team: form.team.trim().slice(0, 80), teamKey: teamKey(form.team), pinHash: pinHash(form.team, pin), members: (form.members ?? "").trim().slice(0, 300),
       problem: (form.problem ?? "").trim().slice(0, 2000), solution: (form.solution ?? "").trim().slice(0, 2000),
       tone: (form.tone ?? "재미있고 유쾌하게").slice(0, 60), result: payload.result ?? null,
       discovery: payload.discovery ?? null, solutionCandidates: payload.solutionCandidates ?? [],
       selectedCandidate: Number.isInteger(payload.selectedCandidate) ? payload.selectedCandidate : -1,
+      workshopImport: payload.workshopImport ?? null,
       selectedName: (payload.selectedName ?? "").slice(0, 100), step,
       status: payload.result ? "사업화 완료" : form.solution ? "해결책 작성" : form.problem ? "문제 작성" : "팀 등록",
       createdAt: old.exists ? old.data()?.createdAt : FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
+      updatedAt,
     }, { merge: true });
-    return Response.json({ ok: true, code });
+    return Response.json({ ok: true, code, updatedAt: updatedAt.toDate().toISOString() });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "DB 연결 오류" }, { status: 500 });
   }
