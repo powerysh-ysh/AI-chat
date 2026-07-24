@@ -80,7 +80,9 @@ export default function Home() {
   const [seconds, setSeconds] = useState(180);
   const [running, setRunning] = useState(false);
   const [projectCode, setProjectCode] = useState("");
+  const [teamPin, setTeamPin] = useState("");
   const [restoreTeam, setRestoreTeam] = useState("");
+  const [restorePin, setRestorePin] = useState("");
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
   const [restoreError, setRestoreError] = useState("");
   const [workshopImport, setWorkshopImport] = useState<WorkshopImport | null>(null);
@@ -99,6 +101,7 @@ export default function Home() {
           setSelectedCandidate(parsed.selectedCandidate ?? -1);
           setSelectedName(parsed.selectedName ?? "");
           setProjectCode(parsed.projectCode ?? "");
+          setTeamPin(parsed.teamPin ?? "");
           setWorkshopImport(parsed.workshopImport ?? null);
         });
       } catch {}
@@ -106,29 +109,31 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("local-hero-project", JSON.stringify({ form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, workshopImport }));
-  }, [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, workshopImport]);
+    localStorage.setItem("local-hero-project", JSON.stringify({ form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, teamPin, workshopImport }));
+  }, [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, teamPin, workshopImport]);
 
   useEffect(() => {
-    if (!started || !form.team.trim()) return;
+    if (!started || !form.team.trim() || !/^\d{4}$/.test(teamPin)) return;
     queueMicrotask(() => setSaveState("saving"));
     const timer = window.setTimeout(async () => {
       try {
         const response = await fetch("/api/projects", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ code: projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step }),
+          body: JSON.stringify({ code: projectCode, pin: teamPin, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error();
+        if (!response.ok) throw new Error(data.error ?? "팀 정보를 저장하지 못했습니다.");
         if (!projectCode && data.code) setProjectCode(data.code);
         setSaveState("saved");
-      } catch {
+        setError("");
+      } catch (e) {
         setSaveState("error");
+        setError(e instanceof Error ? e.message : "팀 정보를 저장하지 못했습니다.");
       }
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [started, projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step]);
+  }, [started, projectCode, teamPin, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step]);
 
   useEffect(() => {
     if (!running || seconds <= 0) return;
@@ -247,7 +252,7 @@ ${result.pitch}`;
 
   function reset() {
     if (!confirm("현재 팀의 내용을 지우고 새로 시작할까요?")) return;
-    setForm(empty); setDiscovery(null); setSolutionCandidates([]); setSelectedCandidate(-1); setResult(null); setSelectedName(""); setProjectCode(""); setWorkshopImport(null); setImageNames([]); setStarted(false); setStep(0);
+    setForm(empty); setDiscovery(null); setSolutionCandidates([]); setSelectedCandidate(-1); setResult(null); setSelectedName(""); setProjectCode(""); setTeamPin(""); setWorkshopImport(null); setImageNames([]); setStarted(false); setStep(0);
     localStorage.removeItem("local-hero-project");
   }
 
@@ -263,6 +268,7 @@ ${result.pitch}`;
     setError("");
     setStep(0);
     setProjectCode("");
+    setTeamPin("");
     localStorage.removeItem("local-hero-project");
     setStarted(true);
   }
@@ -270,9 +276,10 @@ ${result.pitch}`;
   async function restoreProject() {
     const team = restoreTeam.trim();
     if (team.length < 2) return setRestoreError("등록했던 팀 이름을 입력해 주세요.");
+    if (!/^\d{4}$/.test(restorePin)) return setRestoreError("팀 비밀번호 숫자 4자리를 입력해 주세요.");
     setRestoreError("");
     try {
-      const response = await fetch(`/api/projects?team=${encodeURIComponent(team)}`);
+      const response = await fetch(`/api/projects?team=${encodeURIComponent(team)}&pin=${encodeURIComponent(restorePin)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "팀을 찾을 수 없습니다.");
       setForm(data.project.form);
@@ -283,6 +290,7 @@ ${result.pitch}`;
       setSelectedName(data.project.selectedName);
       setWorkshopImport(data.project.workshopImport ?? null);
       setProjectCode(data.project.code);
+      setTeamPin(restorePin);
       setStep(data.project.result ? Math.max(5, data.project.step) : data.project.step);
       setStarted(true);
     } catch (e) {
@@ -338,7 +346,11 @@ ${result.pitch}`;
             <p className="micro">팀별 스마트폰 또는 노트북 한 대면 충분해요 · 자동 저장됩니다</p>
             <div className="restore-box">
               <b>기존 팀 작업을 이어서 하나요?</b>
-              <div><input maxLength={80} value={restoreTeam} onChange={e=>setRestoreTeam(e.target.value)} onKeyDown={e=>e.key==="Enter"&&restoreProject()} placeholder="등록한 팀 이름 입력"/><button onClick={restoreProject}>팀 불러오기</button></div>
+              <div className="restore-fields">
+                <input maxLength={80} value={restoreTeam} onChange={e=>setRestoreTeam(e.target.value)} placeholder="등록한 팀 이름"/>
+                <input className="pin-input" type="password" inputMode="numeric" maxLength={4} value={restorePin} onChange={e=>setRestorePin(e.target.value.replace(/\D/g,"").slice(0,4))} onKeyDown={e=>e.key==="Enter"&&restoreProject()} placeholder="비밀번호 4자리"/>
+                <button onClick={restoreProject}>팀 불러오기</button>
+              </div>
               {restoreError && <small>{restoreError}</small>}
               <small>같은 이름의 팀이 없도록 팀 이름을 정확히 입력해 주세요.</small>
             </div>
@@ -365,8 +377,11 @@ ${result.pitch}`;
 
           {step === 0 && <MissionCard icon="👋" coach="먼저 우리 팀을 소개해 주세요. 재미있는 팀 이름이면 발표할 때 더 기억에 남아요!">
             <Field label="우리 팀 이름" value={form.team} placeholder="예: 좌충우돌 로컬 히어로" onChange={v=>setForm({...form,team:v})}/>
+            <Field label="팀 비밀번호 숫자 4자리" value={teamPin} placeholder="예: 2580" type="password" inputMode="numeric" maxLength={4} onChange={v=>setTeamPin(v.replace(/\D/g,"").slice(0,4))}/>
             <Field label="팀원 이름 (선택)" value={form.members} placeholder="예: 김로컬, 이히어로, 박매니저" onChange={v=>setForm({...form,members:v})}/>
-            <Next disabled={!form.team.trim()} onClick={()=>setStep(1)} />
+            <p className="formula">🔐 작업을 다시 불러올 때 팀 이름과 비밀번호 4자리가 필요합니다. 다른 팀과 겹치지 않는 이름을 사용해 주세요.</p>
+            {error && <p className="error">{error}</p>}
+            <Next disabled={!form.team.trim() || !/^\d{4}$/.test(teamPin)} onClick={()=>setStep(1)} />
           </MissionCard>}
 
           {step === 1 && <MissionCard icon="📷" coach="M1·M2 활동지를 촬영하면 AI가 문제와 해결 아이디어를 읽어 정리합니다. AI가 잘못 읽을 수 있으니 반드시 팀이 확인해 주세요.">
@@ -491,8 +506,8 @@ ${result.pitch}`;
 function MissionCard({icon,coach,children}:{icon:string;coach:string;children:React.ReactNode}) {
   return <div className="mission-card"><aside><div>{icon}</div><b>AI 코치</b><p>{coach}</p><small>정답은 없어요. 팀원 모두의 경험을 들려주세요!</small></aside><section>{children}</section></div>
 }
-function Field({label,value,placeholder,onChange}:{label:string;value:string;placeholder:string;onChange:(v:string)=>void}) {
-  return <label className="field"><span>{label}</span><input value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)}/></label>
+function Field({label,value,placeholder,onChange,type="text",inputMode,maxLength}:{label:string;value:string;placeholder:string;onChange:(v:string)=>void;type?:string;inputMode?:React.HTMLAttributes<HTMLInputElement>["inputMode"];maxLength?:number}) {
+  return <label className="field"><span>{label}</span><input type={type} inputMode={inputMode} maxLength={maxLength} value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)}/></label>
 }
 function Next({disabled,onClick}:{disabled:boolean;onClick:()=>void}) { return <div className="nav"><span/><button className="primary" disabled={disabled} onClick={onClick}>다음 미션 →</button></div> }
 function Nav({onBack,onNext,disabled,nextLabel="다음 미션 →"}:{onBack:()=>void;onNext:()=>void;disabled:boolean;nextLabel?:string}) {
