@@ -80,7 +80,7 @@ export default function Home() {
   const [seconds, setSeconds] = useState(180);
   const [running, setRunning] = useState(false);
   const [projectCode, setProjectCode] = useState("");
-  const [restoreCode, setRestoreCode] = useState("");
+  const [restoreTeam, setRestoreTeam] = useState("");
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
   const [restoreError, setRestoreError] = useState("");
   const [workshopImport, setWorkshopImport] = useState<WorkshopImport | null>(null);
@@ -110,7 +110,7 @@ export default function Home() {
   }, [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, workshopImport]);
 
   useEffect(() => {
-    if (!started || !projectCode || !form.team.trim()) return;
+    if (!started || !form.team.trim()) return;
     queueMicrotask(() => setSaveState("saving"));
     const timer = window.setTimeout(async () => {
       try {
@@ -119,7 +119,9 @@ export default function Home() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ code: projectCode, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step }),
         });
+        const data = await response.json();
         if (!response.ok) throw new Error();
+        if (!projectCode && data.code) setProjectCode(data.code);
         setSaveState("saved");
       } catch {
         setSaveState("error");
@@ -250,8 +252,6 @@ ${result.pitch}`;
   }
 
   function begin() {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const bytes = crypto.getRandomValues(new Uint8Array(8));
     setForm(empty);
     setDiscovery(null);
     setSolutionCandidates([]);
@@ -262,17 +262,17 @@ ${result.pitch}`;
     setImageNames([]);
     setError("");
     setStep(0);
-    setProjectCode(Array.from(bytes, b => alphabet[b % alphabet.length]).join(""));
+    setProjectCode("");
     localStorage.removeItem("local-hero-project");
     setStarted(true);
   }
 
   async function restoreProject() {
-    const code = restoreCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (code.length < 6) return setRestoreError("6~8자리 팀 코드를 입력해 주세요.");
+    const team = restoreTeam.trim();
+    if (team.length < 2) return setRestoreError("등록했던 팀 이름을 입력해 주세요.");
     setRestoreError("");
     try {
-      const response = await fetch(`/api/projects?code=${code}`);
+      const response = await fetch(`/api/projects?team=${encodeURIComponent(team)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "팀을 찾을 수 없습니다.");
       setForm(data.project.form);
@@ -321,7 +321,7 @@ ${result.pitch}`;
     <main>
       <header className="topbar">
         <div className="brand"><span>⚡</span><strong>AI 창업 코치</strong></div>
-        <div className="header-note">{started && projectCode ? <><b>팀 코드 {projectCode}</b> · {saveState==="saving"?"저장 중…":saveState==="saved"?"DB 저장 완료 ✓":saveState==="error"?"저장 확인 필요":"자동 저장"}</> : "지역을 이해하고, 아이디어로 해결하다"}</div>
+        <div className="header-note">{started && form.team ? <><b>{form.team}</b> · {saveState==="saving"?"저장 중…":saveState==="saved"?"DB 저장 완료 ✓":saveState==="error"?"저장 확인 필요":"자동 저장"}</> : "지역을 이해하고, 아이디어로 해결하다"}</div>
         <nav className="app-switch"><Link className="active" href="/">참가자 스튜디오</Link><Link href="/admin">운영 대시보드</Link><button className="ghost" onClick={reset}>새 팀 시작</button></nav>
       </header>
 
@@ -337,9 +337,10 @@ ${result.pitch}`;
             {result && <button className="resume" onClick={() => { setStarted(true); setStep(5); }}>저장된 결과 이어보기</button>}
             <p className="micro">팀별 스마트폰 또는 노트북 한 대면 충분해요 · 자동 저장됩니다</p>
             <div className="restore-box">
-              <b>이미 팀 코드가 있나요?</b>
-              <div><input maxLength={8} value={restoreCode} onChange={e=>setRestoreCode(e.target.value.toUpperCase())} placeholder="팀 코드 입력"/><button onClick={restoreProject}>불러오기</button></div>
+              <b>기존 팀 작업을 이어서 하나요?</b>
+              <div><input maxLength={80} value={restoreTeam} onChange={e=>setRestoreTeam(e.target.value)} onKeyDown={e=>e.key==="Enter"&&restoreProject()} placeholder="등록한 팀 이름 입력"/><button onClick={restoreProject}>팀 불러오기</button></div>
               {restoreError && <small>{restoreError}</small>}
+              <small>같은 이름의 팀이 없도록 팀 이름을 정확히 입력해 주세요.</small>
             </div>
           </div>
           <div className="hero-visual">
@@ -354,7 +355,7 @@ ${result.pitch}`;
         <section className="workspace shell">
           <div className="mission-head">
             <div><span className="mission-label">M3 · AI 창업 스튜디오</span><h1>{loading ? "AI 코치가 우리 팀의 사업을 설계하고 있어요…" : steps[step]}</h1></div>
-            <div className="team-code"><small>우리 팀 코드</small><strong>{projectCode}</strong><span>{saveState==="saving"?"DB 저장 중…":saveState==="saved"?"저장 완료 ✓":saveState==="error"?"저장 실패 · 인터넷 확인":"자동 저장 대기"}</span></div>
+            <div className="team-code"><small>우리 팀</small><strong>{form.team || "팀 이름 등록 전"}</strong><span>{saveState==="saving"?"DB 저장 중…":saveState==="saved"?"저장 완료 ✓":saveState==="error"?"저장 실패 · 인터넷 확인":"팀 이름으로 자동 저장"}</span></div>
           </div>
           <div className="progress"><i style={{width:`${progress}%`}} /></div>
           <div className="step-dots seven">{steps.map((x,i)=>{
