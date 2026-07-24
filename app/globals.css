@@ -18,7 +18,7 @@
 .restore-box .restore-fields{display:grid;grid-template-columns:minmax(0,1fr) 145px auto}.restore-box .restore-fields input{text-transform:none;letter-spacing:0}.restore-box .restore-fields .pin-input{letter-spacing:3px}.restore-box .restore-fields button{min-height:44px}
 @media(max-width:520px){.restore-box .restore-fields{grid-template-columns:1fr 1fr}.restore-box .restore-fields button{grid-column:1/-1;padding:12px}}
 
-.app-switch{display:flex;align-items:center;gap:6px}.app-switch>a{color:#675d54;text-decoration:none;padding:9px 11px;border-radius:10px;font-size:13px;font-weight:850}.app-switch>a.active{background:#fff0e5;color:var(--orange)}
+.brand-home{border:0;background:transparent;color:inherit;padding:0;cursor:pointer}.app-switch{display:flex;align-items:center;gap:6px}.app-switch>a{color:#675d54;text-decoration:none;padding:9px 11px;border-radius:10px;font-size:13px;font-weight:850}.app-switch>a.active{background:#fff0e5;color:var(--orange)}
 @media(max-width:850px){.app-switch>a{font-size:11px;padding:7px}.app-switch .ghost{font-size:11px;padding:8px}}
 @media(max-width:520px){.brand strong{display:none}.topbar{padding:0 10px}.app-switch{gap:2px}}
 
