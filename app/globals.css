@@ -30,3 +30,14 @@
 @media(max-width:520px){.mission-rail.seven{grid-template-columns:repeat(4,1fr);row-gap:10px}.admin-title{display:grid}.admin-actions{margin-top:12px}.order-head>div:last-child{display:grid;width:100%}}
 .privacy-note{margin:-15px 0 15px;color:#756a60;background:#f5f1ec;border-radius:10px;padding:9px 12px;font-size:12px}
 .research-block{margin-top:18px;border:1px solid #cfe4d9;background:#f2fbf6;border-radius:16px;padding:17px}.research-block h3{margin:0 0 8px}.research-block>p{line-height:1.7;color:#4f6258}.research-block>div{display:grid;gap:7px}.research-block a{display:grid;text-decoration:none;color:#2f5e47;background:#fff;border-radius:10px;padding:10px}.research-block a span{font-size:12px;color:#6c786f;margin-top:3px}.validation-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:11px}.validation-grid section{background:#fff8ed;border:1px solid #efdfc8;border-radius:14px;padding:14px}.validation-grid h3{font-size:15px;margin:0 0 8px}.validation-grid p{font-size:13px;line-height:1.55;color:#62594f}@media(max-width:700px){.validation-grid{grid-template-columns:1fr}}
+
+/* M1·M2 activity-sheet import and readable business output */
+.editable textarea{resize:none;min-height:78px;height:auto;field-sizing:content;overflow:hidden;line-height:1.65;font-size:15px;color:var(--ink)}
+.result-main{min-width:0}.summary-grid>*{min-width:0}.summary-grid textarea{width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+.sheet-upload{border:2px dashed #efb28e;background:#fff8f1;border-radius:18px;padding:18px;display:grid;grid-template-columns:1fr auto;gap:10px 18px;align-items:center;margin-bottom:20px}
+.sheet-upload>div{display:grid;gap:4px}.sheet-upload>div span,.sheet-upload small{color:var(--muted);font-size:12px}.sheet-upload small{grid-column:1/-1}
+.sheet-upload label{background:var(--orange);color:#fff;border-radius:12px;padding:13px 17px;font-weight:900;cursor:pointer;text-align:center}.sheet-upload label.disabled{opacity:.55;cursor:wait}.sheet-upload input{display:none}
+.import-review{background:#eef9f3;border:1px solid #cbe5d6;border-radius:16px;padding:16px;margin-bottom:22px}.import-review>p{color:#557064;margin:6px 0 12px}.import-review details{background:#fff;border-radius:11px;padding:11px}.import-review summary{font-weight:850;cursor:pointer}.import-review details span{display:block;color:#5d6c64;font-size:13px;margin-top:8px}
+.import-warning{margin-top:10px;background:#fff3d7;color:#795c22;border-radius:10px;padding:10px;font-size:13px}
+.m2-original{background:#fff3d6;border-left:5px solid var(--yellow);border-radius:12px;padding:13px 16px;margin:18px 0}.m2-original p{line-height:1.65;margin:7px 0 0;color:#5f554b}
+@media(max-width:700px){.sheet-upload{grid-template-columns:1fr}.sheet-upload label{width:100%}}
