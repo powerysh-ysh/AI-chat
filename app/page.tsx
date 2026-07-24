@@ -371,10 +371,16 @@ ${result.pitch}`;
           {step === 1 && <MissionCard icon="📷" coach="M1·M2 활동지를 촬영하면 AI가 문제와 해결 아이디어를 읽어 정리합니다. AI가 잘못 읽을 수 있으니 반드시 팀이 확인해 주세요.">
             <div className="sheet-upload">
               <div><b>① M1·M2 활동지 사진 올리기</b><span>최대 2장 · 사진 원본은 저장하지 않습니다</span></div>
-              <label className={loading ? "disabled" : ""}>
-                <input type="file" accept="image/*" capture="environment" multiple disabled={loading} onChange={e=>importWorkshopSheets(e.target.files)}/>
-                {loading ? "AI가 활동지를 읽는 중…" : "📷 촬영 또는 사진 선택"}
-              </label>
+              <div className="upload-actions">
+                <label className={loading ? "disabled" : ""}>
+                  <input type="file" accept="image/*" capture="environment" disabled={loading} onChange={e=>importWorkshopSheets(e.target.files)}/>
+                  {loading ? "분석 중…" : "📷 카메라로 촬영"}
+                </label>
+                <label className={`upload-file ${loading ? "disabled" : ""}`}>
+                  <input type="file" accept="image/*" multiple disabled={loading} onChange={e=>importWorkshopSheets(e.target.files)}/>
+                  🖼️ 기기에서 이미지 업로드
+                </label>
+              </div>
               {!!imageNames.length && <small>선택됨: {imageNames.join(", ")}</small>}
             </div>
             {workshopImport && <div className="import-review">
