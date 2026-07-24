@@ -105,7 +105,8 @@ export default function AdminPage() {
 
   const filtered = useMemo(() => registeredProjects.filter(p => {
     const matchesQuery = `${p.team} ${p.members} ${p.problem}`.toLowerCase().includes(query.toLowerCase());
-    const matchesStatus = status === "전체" || p.status === status || stageLabel(p) === status;
+    const selectedStage = STAGES.indexOf(status) + 1;
+    const matchesStatus = status === "전체" || (selectedStage > 0 && stageNumber(p) >= selectedStage);
     return matchesQuery && matchesStatus;
   }), [registeredProjects, query, status]);
 
