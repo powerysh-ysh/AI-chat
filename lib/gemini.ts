@@ -51,12 +51,21 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY가 없습니다.");
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const configuredModel = process.env.GEMINI_MODEL?.trim();
+  const retiredModels = new Set([
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.5-flash",
+  ]);
+  // 2026년 7월 기준 운영용 안정 모델. Vercel에 과거 모델명이 남아 있어도 자동 전환합니다.
+  const model = !configuredModel || retiredModels.has(configuredModel)
+    ? "gemini-3.5-flash"
+    : configuredModel;
   const parts: GeminiPart[] = [
     { text: prompt },
     ...images.map(parseDataUrl),
   ];
-  const generationConfig: Record<string, unknown> = { temperature: 0.35 };
+  const generationConfig: Record<string, unknown> = {};
   // Google Search 도구와 JSON MIME 강제 설정은 일부 Gemini 모델에서 충돌합니다.
   if (!useSearch) generationConfig.responseMimeType = "application/json";
 
