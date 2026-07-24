@@ -37,7 +37,8 @@
 .sheet-upload{border:2px dashed #efb28e;background:#fff8f1;border-radius:18px;padding:18px;display:grid;grid-template-columns:1fr auto;gap:10px 18px;align-items:center;margin-bottom:20px}
 .sheet-upload>div{display:grid;gap:4px}.sheet-upload>div span,.sheet-upload small{color:var(--muted);font-size:12px}.sheet-upload small{grid-column:1/-1}
 .sheet-upload label{background:var(--orange);color:#fff;border-radius:12px;padding:13px 17px;font-weight:900;cursor:pointer;text-align:center}.sheet-upload label.disabled{opacity:.55;cursor:wait}.sheet-upload input{display:none}
+.sheet-upload .upload-actions{display:flex;gap:8px}.sheet-upload .upload-actions label{white-space:nowrap}.sheet-upload .upload-actions .upload-file{background:#342d28}
 .import-review{background:#eef9f3;border:1px solid #cbe5d6;border-radius:16px;padding:16px;margin-bottom:22px}.import-review>p{color:#557064;margin:6px 0 12px}.import-review details{background:#fff;border-radius:11px;padding:11px}.import-review summary{font-weight:850;cursor:pointer}.import-review details span{display:block;color:#5d6c64;font-size:13px;margin-top:8px}
 .import-warning{margin-top:10px;background:#fff3d7;color:#795c22;border-radius:10px;padding:10px;font-size:13px}
 .m2-original{background:#fff3d6;border-left:5px solid var(--yellow);border-radius:12px;padding:13px 16px;margin:18px 0}.m2-original p{line-height:1.65;margin:7px 0 0;color:#5f554b}
-@media(max-width:700px){.sheet-upload{grid-template-columns:1fr}.sheet-upload label{width:100%}}
+@media(max-width:700px){.sheet-upload{grid-template-columns:1fr}.sheet-upload label{width:100%}.sheet-upload .upload-actions{display:grid}}
