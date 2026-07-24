@@ -40,3 +40,41 @@ export async function POST(request: Request) {
     return Response.json({ error: error instanceof Error ? error.message : "발표 순서 저장 오류" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  const expected = process.env.ADMIN_PIN;
+  if (!expected || request.headers.get("x-admin-pin") !== expected) {
+    return Response.json({ error: "운영 비밀번호가 올바르지 않습니다." }, { status: 401 });
+  }
+
+  try {
+    const payload = (await request.json()) as { code?: string; deleteAll?: boolean };
+    const db = getAdminDb();
+
+    if (payload.deleteAll === true) {
+      let deleted = 0;
+
+      while (true) {
+        const snapshot = await db.collection("projects").limit(400).get();
+        if (snapshot.empty) break;
+
+        const batch = db.batch();
+        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        deleted += snapshot.size;
+      }
+
+      return Response.json({ ok: true, deleted });
+    }
+
+    const code = typeof payload.code === "string" ? payload.code.trim() : "";
+    if (!code) {
+      return Response.json({ error: "삭제할 팀 정보가 없습니다." }, { status: 400 });
+    }
+
+    await db.collection("projects").doc(code).delete();
+    return Response.json({ ok: true, deleted: 1 });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "팀 삭제 오류" }, { status: 500 });
+  }
+}
