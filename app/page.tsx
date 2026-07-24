@@ -181,6 +181,11 @@ ${result.pitch}`;
     }
   }
 
+  function rerunBusiness() {
+    if (!window.confirm("현재 사업 한 장과 발표문을 새로운 AI 결과로 바꿀까요? 팀이 직접 수정한 내용도 새 결과로 바뀝니다.")) return;
+    void createBusiness();
+  }
+
   async function analyzeProblem() {
     setLoading(true); setError(""); setStep(2);
     try {
@@ -436,6 +441,7 @@ ${result.pitch}`;
               <label className="field-label tone-label">우리 팀의 최종 문제 정의</label>
               <textarea className="big-input compact" value={discovery.problemStatement} onChange={e=>setDiscovery({...discovery,problemStatement:e.target.value})}/>
               <details className="validation-box"><summary>현장에서 확인할 질문 3개 보기</summary>{discovery.validationQuestions.map((q,i)=><p key={`${q}-${i}`}>{i+1}. {q}</p>)}</details>
+              <button className="rerun-ai" onClick={()=>void analyzeProblem()}>↻ AI 문제 분석 다시 실행</button>
               <Nav onBack={()=>setStep(1)} disabled={!discovery.problemStatement.trim()} onNext={generateSolutions} nextLabel="해결 아이디어 3개 만들기 →"/>
             </> : <><p className="error">{error}</p><button className="primary" onClick={analyzeProblem}>문제 다시 분석하기</button></>}
           </MissionCard>}
@@ -452,6 +458,7 @@ ${result.pitch}`;
               <div className="formula">✅ <strong>선택 기준</strong>　고객이 정말 원하는가? · 우리 팀이 작게 시험할 수 있는가? · 기존 방식보다 나은가?</div>
               <label className="field-label tone-label">발표 분위기를 골라 주세요</label>
               <div className="tone-row">{(["따뜻하고 공감되게","재미있고 유쾌하게","전문적이고 설득력 있게"] as const).map(x=><button className={form.tone===x?"selected":""} onClick={()=>setForm({...form,tone:x})} key={x}>{x}</button>)}</div>
+              <button className="rerun-ai" onClick={()=>void generateSolutions()}>↻ 해결 아이디어 3개 다시 만들기</button>
               <Nav onBack={()=>setStep(2)} disabled={!form.solution.trim()} onNext={createBusiness} nextLabel="선택안 AI로 사업화하기 ✨" />
             </>}
           </MissionCard>}
@@ -490,6 +497,8 @@ ${result.pitch}`;
               <button className="primary full" onClick={()=>setStep(6)}>3분 발표 준비 →</button>
               <button className="back full" onClick={copyAll}>{copied ? "복사했어요 ✓" : "전체 내용 복사"}</button>
               <button className="back full" onClick={()=>window.print()}>사업 한 장 인쇄·PDF</button>
+              <button className="rerun-ai full" onClick={rerunBusiness}>↻ AI 사업화 다시 실행</button>
+              <small className="rerun-note">다시 실행하면 사업 한 장과 발표문이 새로운 결과로 바뀝니다.</small>
               <button className="text-button" onClick={()=>setStep(3)}>← 해결안 다시 비교하기</button>
             </aside>
           </div>}
