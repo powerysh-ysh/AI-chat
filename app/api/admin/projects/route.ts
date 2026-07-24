@@ -48,7 +48,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const payload = (await request.json()) as { code?: string; deleteAll?: boolean };
+    const payload = (await request.json()) as { code?: string; codes?: string[]; deleteAll?: boolean };
     const db = getAdminDb();
 
     if (payload.deleteAll === true) {
@@ -65,6 +65,17 @@ export async function DELETE(request: Request) {
       }
 
       return Response.json({ ok: true, deleted });
+    }
+
+    const codes = Array.isArray(payload.codes)
+      ? [...new Set(payload.codes.filter(code => typeof code === "string").map(code => code.trim()).filter(Boolean))].slice(0, 300)
+      : [];
+
+    if (codes.length > 0) {
+      const batch = db.batch();
+      codes.forEach(code => batch.delete(db.collection("projects").doc(code)));
+      await batch.commit();
+      return Response.json({ ok: true, deleted: codes.length });
     }
 
     const code = typeof payload.code === "string" ? payload.code.trim() : "";
