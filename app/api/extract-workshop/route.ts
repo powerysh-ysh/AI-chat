@@ -23,8 +23,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "M1·M2 활동지 사진을 선택해 주세요." }, { status: 400 });
   }
 
-  const openAiKey = process.env.OPENAI_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
   if (!openAiKey && !geminiKey) {
     return Response.json({ error: "AI API 키가 연결되지 않았습니다. 운영자에게 알려 주세요." }, { status: 503 });
   }
@@ -38,12 +38,14 @@ solution은 참가자의 원래 아이디어를 유지해 "우리 팀은 [고객
 반드시 JSON 하나만 출력하세요:
 {"problem":"M1 문제 문장","solution":"M2 해결 문장","extractedNotes":["사진에서 실제로 읽힌 핵심 메모"],"warnings":["흐리거나 뜻이 불분명해 참가자가 확인할 부분"]}`;
 
+  let geminiError = "";
   try {
     if (geminiKey) {
       try {
         return Response.json(await callGeminiJson({ prompt: instruction, images }));
       } catch (error) {
         console.error("Gemini workshop extraction failed", error);
+        geminiError = error instanceof Error ? error.message : "Gemini 사진 분석에 실패했습니다.";
         if (!openAiKey) throw error;
       }
     }
@@ -69,11 +71,11 @@ solution은 참가자의 원래 아이디어를 유지해 "우리 팀은 [고객
         ? "사진 용량이 큽니다. 한 장씩 다시 올려 주세요."
         : response.status === 429
           ? "AI 사용 한도 또는 결제 상태를 확인해 주세요."
-          : "사진 분석에 실패했습니다. 글씨가 잘 보이도록 한 장씩 다시 촬영해 주세요.";
+          : geminiError || "사진 분석에 실패했습니다. 글씨가 잘 보이도록 한 장씩 다시 촬영해 주세요.";
       return Response.json({ error: message }, { status: 502 });
     }
     return Response.json(parseJson(extractOpenAiText(await response.json())));
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "사진 분석 오류" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "사진 분석 오류" }, { status: 502 });
   }
 }
