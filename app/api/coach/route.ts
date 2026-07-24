@@ -17,46 +17,25 @@ type CoachResult = {
   firstExperiment: string;
   pitch: string;
   qa: { question: string; answer: string }[];
+  researchSummary?: string;
+  evidence?: { claim: string; sourceTitle: string; url: string }[];
+  assumptions?: string[];
+  risks?: string[];
   demo?: boolean;
 };
-
-function fallback(input: Input): CoachResult {
-  const customer = input.problem?.split(/이 |가 |은 |는 /)[0]?.trim() || "지역 주민";
-  const core = input.solution?.replace(/^우리 팀은.*?위해\s*/, "").replace(/을 제안합니다.*$/, "").trim() || "지역 문제 해결 서비스";
-  return {
-    serviceNames: ["동네한걸음", "로컬톡톡", "함께잇다"],
-    slogan: "지역의 불편을 발견하고, 함께 새로운 길을 만듭니다",
-    customer,
-    problemInsight: input.problem || "지역의 일상에서 반복되는 불편을 겪고 있습니다.",
-    solution: input.solution || "누구나 쉽게 이용할 수 있는 지역 맞춤 서비스를 제안합니다.",
-    differentiator: "지역 주민과 상인의 실제 경험을 반영하고, 처음 쓰는 사람도 질문 세 번 안에 필요한 도움을 받을 수 있습니다.",
-    revenueModel: "초기에는 무료 체험으로 고객 반응을 확인하고, 이후 제휴 수수료·기관 협력비·상점 홍보비로 운영합니다.",
-    localImpact: "방문객의 만족도를 높이고 지역 상권과 주민의 연결을 늘려 지역 안에서 소비와 관계가 이어지게 합니다.",
-    firstExperiment: `이번 주 ${customer} 5명에게 ${core} 아이디어를 보여주고, 가장 필요한 기능과 이용 의향을 인터뷰합니다.`,
-    pitch: `안녕하세요. 저희는 ${input.team || "로컬 히어로"} 팀입니다.
-
-여러분도 지역에서 작지만 반복되는 불편을 경험한 적 있으신가요? 저희가 발견한 문제는 다음과 같습니다. ${input.problem}
-
-그래서 저희는 ${input.solution} 이름하여 ‘동네한걸음’입니다.
-
-이 서비스의 특별한 점은 복잡한 설명 없이 누구나 쉽게 이용하고, 지역의 실제 목소리를 계속 반영한다는 것입니다. 초기에는 고객 5명을 직접 만나 작은 실험부터 시작하겠습니다. 이후 제휴 수수료와 기관 협력으로 지속 가능한 운영 구조를 만들겠습니다.
-
-저희가 만들고 싶은 것은 단순한 서비스 하나가 아닙니다. 지역의 불편이 새로운 기회가 되고, 주민과 상인이 더 잘 연결되는 변화입니다.
-
-저희 ${input.team || "로컬 히어로"} 팀의 첫걸음에 투자해 주세요. 감사합니다!`,
-    qa: [
-      { question: "정말 이 서비스를 필요로 하는 사람이 있나요?", answer: "행사 후 핵심 고객 5명을 직접 만나 문제와 이용 의향을 확인하겠습니다." },
-      { question: "기존 서비스와 무엇이 다른가요?", answer: "지역의 실제 경험을 반영하고, 처음 이용하는 사람도 쉽게 쓸 수 있도록 단계를 줄인 점이 다릅니다." },
-      { question: "어떻게 돈을 벌고 계속 운영하나요?", answer: "작은 무료 실험으로 수요를 확인한 뒤 제휴 수수료, 기관 협력비, 홍보비를 단계적으로 검증하겠습니다." },
-    ],
-    demo: true,
-  };
-}
 
 function extractText(payload: unknown): string {
   const data = payload as { output_text?: string; output?: { content?: { text?: string }[] }[] };
   if (data.output_text) return data.output_text;
   return data.output?.flatMap(x => x.content ?? []).map(x => x.text ?? "").join("") ?? "";
+}
+
+function parseJson(text: string) {
+  const cleaned = text.replace(/^```json\s*|\s*```$/g, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end < start) throw new Error("AI 응답 형식 오류");
+  return JSON.parse(cleaned.slice(start, end + 1));
 }
 
 export async function POST(request: Request) {
@@ -66,9 +45,11 @@ export async function POST(request: Request) {
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return Response.json(fallback(input));
+  if (!apiKey) {
+    return Response.json({ error: "실제 AI가 연결되지 않았습니다. Vercel에 OPENAI_API_KEY를 등록해 주세요.", code: "AI_NOT_CONFIGURED" }, { status: 503 });
+  }
 
-  const prompt = `당신은 지역문제 해결형 창업 워크숍의 친절한 AI 창업 코치입니다.
+  const prompt = `당신은 지역문제 해결형 창업 워크숍의 시니어 창업전략가이자 리서처입니다.
 참가자는 창업을 처음 배우는 일반인입니다. 어려운 전문용어, 과장된 시장규모, 근거 없는 수치는 쓰지 마세요.
 입력:
 - 팀명: ${input.team}
@@ -76,27 +57,35 @@ export async function POST(request: Request) {
 - 해결 문장: ${input.solution}
 - 원하는 말투: ${input.tone}
 
-두 문장의 의도를 바꾸지 말고 구체화하세요. 핵심 고객은 한 집단으로 좁히고, 수익모델은 초보자도 이해할 수 있게 하세요.
-첫 실험은 1주일 안에 5명 이하로 할 수 있어야 합니다. 3분 발표문은 문제-고객-해결책-차별점-운영/수익-지역효과-투자요청 순서로 자연스럽게 작성하세요.
+웹 검색으로 해당 지역·고객·문제·유사 서비스에 관한 최신 자료를 확인하세요. 검색 결과가 아이디어와 직접 관련 없으면 억지로 사용하지 마세요.
+확인된 사실, 합리적 해석, 아직 검증하지 않은 가정을 엄격히 구분하세요. 출처 없는 숫자를 만들지 마세요.
+두 문장의 의도를 바꾸지 말고 구체화하되, 고객은 가장 절실한 한 집단으로 좁히세요.
+차별점은 "지역 맞춤", "쉽게 사용" 같은 추상어가 아니라 기존 대안과 비교해 행동·과정·비용·접근성 중 무엇이 어떻게 다른지 쓰세요.
+수익모델은 지불 고객, 지불 이유, 과금 단위, 첫 매출 실험을 포함하세요.
+첫 실험은 1주일 안에 5명 이하로 할 수 있어야 합니다. 3분 발표문은 문제 근거-고객-현재 대안의 한계-해결책-차별점-수익-검증계획-요청 순서로 작성하세요.
 반드시 아래 키를 가진 JSON 하나만 출력하세요:
-{"serviceNames":["짧은 한글 이름 3개"],"slogan":"한 문장","customer":"한 문장","problemInsight":"한 문장","solution":"두 문장 이내","differentiator":"두 문장 이내","revenueModel":"두 문장 이내","localImpact":"한 문장","firstExperiment":"한 문장","pitch":"약 700~900자 발표문","qa":[{"question":"질문","answer":"답변"}]}
-qa는 3개를 만드세요.`;
+{"serviceNames":["짧은 한글 이름 3개"],"slogan":"한 문장","customer":"완전한 한 문장","problemInsight":"근거를 반영한 두 문장","solution":"두 문장 이내","differentiator":"비교 기준이 드러나는 두 문장","revenueModel":"지불고객·과금단위·첫매출 실험을 포함한 세 문장","localImpact":"한 문장","firstExperiment":"측정 기준이 있는 한 문장","researchSummary":"검색으로 확인한 핵심 사실 3~4문장","evidence":[{"claim":"이 아이템을 뒷받침하는 사실","sourceTitle":"출처 제목","url":"https URL"}],"assumptions":["아직 확인하지 않은 핵심 가정 3개"],"risks":["실행 시 가장 큰 위험 3개"],"pitch":"약 800~1000자 발표문","qa":[{"question":"날카로운 질문","answer":"근거와 검증 계획을 포함한 답변"}]}
+evidence는 실제로 검색한 신뢰 가능한 출처 2~4개, qa는 4개를 만드세요.`;
 
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+        model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
+        tools: [{ type: "web_search" }],
         input: prompt,
-        temperature: 0.7,
+        reasoning: { effort: "low" },
+        text: { verbosity: "medium" },
       }),
     });
-    if (!response.ok) return Response.json(fallback(input));
-    const raw = extractText(await response.json()).replace(/^```json\s*|\s*```$/g, "");
-    const parsed = JSON.parse(raw) as CoachResult;
+    if (!response.ok) {
+      const detail = await response.text();
+      return Response.json({ error: "AI 검색·분석에 실패했습니다.", detail: detail.slice(0, 500) }, { status: 502 });
+    }
+    const parsed = parseJson(extractText(await response.json())) as CoachResult;
     return Response.json(parsed);
-  } catch {
-    return Response.json(fallback(input));
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "AI 분석 오류" }, { status: 500 });
   }
 }
