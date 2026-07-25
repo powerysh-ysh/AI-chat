@@ -104,6 +104,7 @@ evidence는 반드시 빈 배열로 두고, qa는 4개를 만드세요.`;
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${openAiKey}` },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
         tools: [],
