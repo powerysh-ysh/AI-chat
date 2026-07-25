@@ -73,19 +73,22 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false, t
   if (!apiKey) throw new Error("GEMINI_API_KEY가 없습니다.");
 
   const configuredModel = process.env.GEMINI_MODEL?.trim();
-  const retiredModels = new Set([
+  const unavailableModels = new Set([
     "gemini-2.0-flash",
     "gemini-2.0-flash-001",
-    "gemini-2.5-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash-lite-001",
+    "gemini-3.1-flash-lite-preview",
   ]);
-  const primaryModel = !configuredModel || retiredModels.has(configuredModel)
-    ? "gemini-3.5-flash"
-    : configuredModel;
+  const configuredCandidate = configuredModel && !unavailableModels.has(configuredModel)
+    ? configuredModel
+    : null;
   const models = [...new Set([
-    primaryModel,
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-  ])];
+    configuredCandidate,
+    "gemini-3.5-flash",
+  ].filter((model): model is string => Boolean(model)))];
 
   let lastError: Error | null = null;
   const deadline = Date.now() + timeoutMs;
@@ -123,7 +126,7 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false, t
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(Math.max(1000, Math.min(7000, remaining))),
+            signal: AbortSignal.timeout(Math.max(1000, Math.min(4500, remaining))),
           },
         );
       } catch (error) {
