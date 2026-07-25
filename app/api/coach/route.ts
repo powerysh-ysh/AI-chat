@@ -3,6 +3,16 @@ type Input = {
   problem?: string;
   solution?: string;
   tone?: string;
+  selectedName?: string;
+  revisionMode?: boolean;
+  discovery?: {
+    customer?: string;
+    situation?: string;
+    rootCauses?: string[];
+    problemStatement?: string;
+    validationQuestions?: string[];
+  } | null;
+  currentDraft?: Partial<CoachResult> | null;
 };
 
 type CoachResult = {
@@ -57,15 +67,25 @@ export async function POST(request: Request) {
 - 문제 문장: ${input.problem}
 - 해결 문장: ${input.solution}
 - 원하는 말투: ${input.tone}
+- 팀이 선택한 서비스명: ${input.selectedName || "아직 선택하지 않음"}
 
-웹 검색으로 해당 지역·고객·문제·유사 서비스에 관한 최신 자료를 확인하세요. 검색 결과가 아이디어와 직접 관련 없으면 억지로 사용하지 마세요.
+팀이 직접 검토·수정한 문제 분석:
+${input.discovery ? JSON.stringify(input.discovery) : "없음"}
+
+팀이 직접 고치거나 추가 조사 내용을 반영한 현재 사업 초안:
+${input.currentDraft ? JSON.stringify(input.currentDraft) : "없음"}
+
+외부 검색을 새로 수행하지 마세요. 참가자가 직접 입력한 경험과 추가 조사 내용을 가장 우선하여 사용하세요.
+참가자가 수정한 문장은 '확정된 사실과 의도'입니다. 재실행하더라도 삭제하거나 반대 의미로 바꾸지 말고, 팀의 말투를 유지하면서 구조·구체성·설득력만 보완하세요.
+예를 들어 "안내표지판이 없다", "엘리베이터 위치를 몰랐다"고 적었다면 "표지판이 많아 복잡했다"처럼 다른 사실로 바꾸면 안 됩니다.
+현재 사업 초안이 있다면 새 문서로 갈아엎지 말고, 그 초안을 기준으로 빠진 연결과 실행 방법만 보완하세요. 팀이 선택한 서비스명이 있으면 serviceNames의 첫 번째 항목으로 유지하세요.
 확인된 사실, 합리적 해석, 아직 검증하지 않은 가정을 엄격히 구분하세요. 출처 없는 숫자를 만들지 마세요.
 두 문장의 의도를 바꾸지 말고 구체화하되, 고객은 가장 절실한 한 집단으로 좁히세요.
 차별점은 "지역 맞춤", "쉽게 사용" 같은 추상어가 아니라 기존 대안과 비교해 행동·과정·비용·접근성 중 무엇이 어떻게 다른지 쓰세요.
 수익모델은 지불 고객, 지불 이유, 과금 단위, 첫 매출 실험을 포함하세요.
 첫 실험은 1주일 안에 5명 이하로 할 수 있어야 합니다. 3분 발표문은 문제 근거-고객-현재 대안의 한계-해결책-차별점-수익-검증계획-요청 순서로 작성하세요.
 반드시 아래 키를 가진 JSON 하나만 출력하세요:
-{"serviceNames":["짧은 한글 이름 3개"],"slogan":"한 문장","customer":"완전한 한 문장","problemInsight":"근거를 반영한 두 문장","solution":"두 문장 이내","differentiator":"비교 기준이 드러나는 두 문장","revenueModel":"지불고객·과금단위·첫매출 실험을 포함한 세 문장","localImpact":"한 문장","firstExperiment":"측정 기준이 있는 한 문장","researchSummary":"검색으로 확인한 핵심 사실 3~4문장","evidence":[{"claim":"이 아이템을 뒷받침하는 사실","sourceTitle":"출처 제목","url":"https URL"}],"assumptions":["아직 확인하지 않은 핵심 가정 3개"],"risks":["실행 시 가장 큰 위험 3개"],"pitch":"약 800~1000자 발표문","qa":[{"question":"날카로운 질문","answer":"근거와 검증 계획을 포함한 답변"}]}
+{"serviceNames":["짧은 한글 이름 3개"],"slogan":"한 문장","customer":"완전한 한 문장","problemInsight":"근거를 반영한 두 문장","solution":"두 문장 이내","differentiator":"비교 기준이 드러나는 두 문장","revenueModel":"지불고객·과금단위·첫매출 실험을 포함한 세 문장","localImpact":"한 문장","firstExperiment":"측정 기준이 있는 한 문장","researchSummary":"참가자 입력과 조사에서 확인한 핵심 사실 3~4문장","evidence":[{"claim":"이 아이템을 뒷받침하는 사실","sourceTitle":"출처 제목","url":"https URL"}],"assumptions":["아직 확인하지 않은 핵심 가정 3개"],"risks":["실행 시 가장 큰 위험 3개"],"pitch":"약 800~1000자 발표문","qa":[{"question":"날카로운 질문","answer":"근거와 검증 계획을 포함한 답변"}]}
 evidence는 반드시 빈 배열로 두고, qa는 4개를 만드세요.`;
 
   let geminiError = "";
