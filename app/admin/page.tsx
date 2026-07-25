@@ -256,6 +256,36 @@ export default function AdminPage() {
     }
   }
 
+  async function resetProjectPin(project: Project) {
+    const nextPin = window.prompt(
+      `‘${project.team}’ 팀의 새 비밀번호 숫자 4자리를 입력해 주세요.\n기존 작성 데이터는 삭제되지 않습니다.`,
+      "",
+    );
+    if (nextPin === null) return;
+    if (!/^\d{4}$/.test(nextPin.trim())) {
+      window.alert("새 팀 비밀번호는 숫자 4자리로 입력해 주세요.");
+      return;
+    }
+    if (!window.confirm(`‘${project.team}’ 팀의 비밀번호를 ${nextPin.trim()}(으)로 변경할까요?\n기존 작성 데이터는 그대로 유지됩니다.`)) return;
+
+    setTeamActionBusy(true);
+    try {
+      const response = await fetch("/api/admin/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-pin": pin },
+        body: JSON.stringify({ resetPinCode: project.code, newPin: nextPin.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "팀 비밀번호를 재설정하지 못했습니다.");
+      await load(pin);
+      window.alert(`‘${project.team}’ 팀의 비밀번호를 재설정했습니다.\n참가자 스튜디오에서 팀 이름과 새 비밀번호로 다시 불러오세요.`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "팀 비밀번호를 재설정하지 못했습니다.");
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
   if (!signedIn) return (
     <main className="admin-login">
       <Link href="/" className="admin-home">← 참가자 스튜디오</Link>
@@ -400,6 +430,9 @@ export default function AdminPage() {
             <details><summary>3분 발표문 보기</summary><p>{selected.result.pitch}</p></details></> :
             <div className="not-yet">아직 AI 사업화 결과를 만들지 않았습니다.</div>}
           <button className="detail-print" onClick={() => window.print()}>인쇄·PDF 저장</button>
+          <button className="detail-reset-pin" onClick={() => void resetProjectPin(selected)} disabled={teamActionBusy}>
+            {teamActionBusy ? "처리 중…" : "🔑 팀 비밀번호 재설정"}
+          </button>
         </aside>
       </div>}
 
@@ -418,6 +451,7 @@ export default function AdminPage() {
         .live-card-head{display:grid;grid-template-columns:58px 1fr auto;gap:13px;align-items:center}.team-sequence{display:grid;place-items:center;width:54px;height:54px;background:#28211d;color:#fff;border-radius:17px;font-size:24px;font-weight:950}.team-sequence small{font-size:8px;letter-spacing:1px;color:#ffba8e}.live-card-head>div{min-width:0}.live-card-head>div>small{color:#9b8d81}.live-card-head h2{font-size:22px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-card-head p{margin:0;color:#81756b;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.team-badges{display:grid;justify-items:end;gap:5px}.team-badges i{font-style:normal;background:#eee7e0;color:#86796f;border-radius:99px;padding:7px 10px;font-size:11px;font-weight:850}.team-badges i.active{background:#def7e9;color:#24724a}.display-badge{background:#fff0c8;color:#9a6200;border:1px solid #f2cf79;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:950}
         .stage-line{display:flex;align-items:end;justify-content:space-between;margin-top:19px}.stage-line>div{display:grid;gap:2px}.stage-line b{font-size:10px;color:#ee5a24;letter-spacing:1px}.stage-line strong{font-size:17px}.stage-line>span{font-size:12px;color:#8c8076}.mini-progress{height:7px;background:#eee6dd;border-radius:99px;overflow:hidden;margin:9px 0 16px}.mini-progress i{display:block;height:100%;background:linear-gradient(90deg,#ff5b22,#ffc83d);border-radius:99px;transition:width .35s}
         .live-content{display:grid;grid-template-columns:1fr 1fr;gap:9px}.live-content section{min-width:0;background:#faf6f1;border-radius:13px;padding:11px}.live-content section:last-child{grid-column:1/-1}.live-content section.complete-content{background:#ebf8f0}.live-content small{display:block;color:#a05730;font-weight:900;font-size:10px;margin-bottom:5px}.live-content p{margin:0;color:#5f564e;font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}.live-team-card footer{display:flex;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid #eee4da;font-size:11px;color:#90847a}.live-team-card footer strong{color:#ee5a24}.live-empty{grid-column:1/-1;background:#fff;border:1px solid #e7d8c8;border-radius:18px}
+        .detail-reset-pin{width:100%;margin-top:8px;border:1px solid #d8c7b7;background:#fff7ef;color:#6a4b36;border-radius:12px;padding:13px;font-weight:900;cursor:pointer}.detail-reset-pin:disabled{opacity:.55;cursor:not-allowed}
         @keyframes livePulse{70%{box-shadow:0 0 0 7px #3ee48f00}}
         @media(max-width:1100px){.live-tools{grid-template-columns:1fr}.live-tools .team-view-filter{border-right:0;padding-right:0}.live-team-grid{grid-template-columns:1fr}}
         @media(max-width:600px){.live-card-head{grid-template-columns:48px 1fr}.team-sequence{width:46px;height:46px;font-size:20px}.team-badges{grid-column:1/-1;justify-items:start}.live-content{grid-template-columns:1fr}.live-content section:last-child{grid-column:auto}.live-team-card{padding:16px}.live-team-card.selection-mode{padding-top:54px}.live-strip{width:100%;border-radius:13px;flex-wrap:wrap}.admin-actions{flex-wrap:wrap}.team-selection-bar{align-items:flex-start;flex-direction:column}.team-selection-bar nav{width:100%}.team-selection-bar button{flex:1}}
