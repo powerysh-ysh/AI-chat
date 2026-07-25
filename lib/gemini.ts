@@ -108,14 +108,25 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
     if (searchEnabled) body.tools = [{ google_search: {} }];
 
     for (const model of models) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
+      let response: Response;
+      try {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(15000),
+          },
+        );
+      } catch (error) {
+        const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+        lastError = new Error(timedOut
+          ? `Gemini 모델 '${model}'의 응답 시간이 초과되었습니다.`
+          : `Gemini 모델 '${model}'에 연결하지 못했습니다.`);
+        console.error("Gemini request network failure", model, searchEnabled, error);
+        continue;
+      }
 
       if (response.ok) {
         try {
