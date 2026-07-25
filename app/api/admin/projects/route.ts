@@ -46,8 +46,104 @@ export async function POST(request: Request) {
       isLiveDisplay?: boolean;
       resetPinCode?: string;
       newPin?: string;
+      restoreProjectCode?: string;
+      restoreProject?: {
+        problem?: string;
+        solution?: string;
+        selectedName?: string;
+        discovery?: unknown;
+        solutionCandidates?: unknown;
+        result?: {
+          serviceNames?: string[];
+          slogan?: string;
+          customer?: string;
+          problemInsight?: string;
+          solution?: string;
+          differentiator?: string;
+          revenueModel?: string;
+          localImpact?: string;
+          firstExperiment?: string;
+          pitch?: string;
+          qa?: unknown[];
+        };
+      };
     };
     const db = getAdminDb();
+
+    const restoreProjectCode = typeof payload.restoreProjectCode === "string" ? payload.restoreProjectCode.trim() : "";
+    if (restoreProjectCode) {
+      const restore = payload.restoreProject;
+      const problem = String(restore?.problem ?? "").trim().slice(0, 2000);
+      const solution = String(restore?.solution ?? "").trim().slice(0, 2000);
+      const selectedName = String(restore?.selectedName ?? restore?.result?.serviceNames?.[0] ?? "").trim().slice(0, 100);
+      if (!problem || !solution || !selectedName) {
+        return Response.json({ error: "복구하려면 M1 문제, M2 해결 아이디어, 서비스명이 모두 필요합니다." }, { status: 400 });
+      }
+
+      const ref = db.collection("projects").doc(restoreProjectCode);
+      const snapshot = await ref.get();
+      if (!snapshot.exists) {
+        return Response.json({ error: "결과물을 복구할 팀을 찾을 수 없습니다." }, { status: 404 });
+      }
+
+      const result = restore?.result ?? {};
+      const serviceNames = Array.isArray(result.serviceNames)
+        ? [...new Set(result.serviceNames.map(value => String(value).trim()).filter(Boolean))].slice(0, 3)
+        : [];
+      if (!serviceNames.includes(selectedName)) serviceNames.unshift(selectedName);
+
+      const customer = String(result.customer ?? "").trim().slice(0, 1000);
+      const resultSolution = String(result.solution ?? solution).trim().slice(0, 2000);
+      const restoredResult = {
+        serviceNames: serviceNames.slice(0, 3),
+        slogan: String(result.slogan ?? "").trim().slice(0, 500),
+        customer,
+        problemInsight: String(result.problemInsight ?? problem).trim().slice(0, 2000),
+        solution: resultSolution,
+        differentiator: String(result.differentiator ?? "").trim().slice(0, 2000),
+        revenueModel: String(result.revenueModel ?? "").trim().slice(0, 2000),
+        localImpact: String(result.localImpact ?? "").trim().slice(0, 2000),
+        firstExperiment: String(result.firstExperiment ?? "").trim().slice(0, 2000),
+        pitch: String(result.pitch ?? "").trim().slice(0, 8000),
+        qa: Array.isArray(result.qa) ? result.qa.slice(0, 10) : [],
+      };
+
+      await ref.set({
+        problem,
+        solution,
+        discovery: restore?.discovery ?? {
+          customer: customer || "핵심 고객을 현장에서 확인합니다.",
+          situation: problem,
+          rootCauses: [problem],
+          problemStatement: problem,
+          validationQuestions: [
+            "이 문제를 실제로 자주 겪는 고객은 누구인가요?",
+            "현재 고객은 어떤 방법으로 문제를 해결하고 있나요?",
+            "이 해결책을 이용하거나 비용을 지불할 의사가 있나요?",
+          ],
+        },
+        solutionCandidates: restore?.solutionCandidates ?? [{
+          title: selectedName,
+          type: "PPT 결과물 복구",
+          description: solution,
+          value: restoredResult.differentiator || resultSolution,
+          feasibility: restoredResult.firstExperiment || "소규모 현장 실험으로 검증합니다.",
+        }],
+        selectedCandidate: 0,
+        result: restoredResult,
+        selectedName,
+        workshopImport: {
+          problem,
+          solution,
+          extractedNotes: ["완성된 PPT 결과물에서 운영자가 복원했습니다."],
+          warnings: ["최초 활동지의 원문과 표현이 다를 수 있으므로 팀이 최종 확인해 주세요."],
+        },
+        step: 6,
+        status: "사업화 완료",
+        updatedAt: Timestamp.now(),
+      }, { merge: true });
+      return Response.json({ ok: true, team: snapshot.data()?.team ?? "", selectedName });
+    }
 
     const resetPinCode = typeof payload.resetPinCode === "string" ? payload.resetPinCode.trim() : "";
     if (resetPinCode) {
