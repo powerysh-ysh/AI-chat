@@ -286,6 +286,7 @@ ${result.pitch}`;
       const response = await fetch("/api/coach", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: AbortSignal.timeout(35000),
         body: JSON.stringify({
           ...form,
           discovery,
@@ -300,7 +301,8 @@ ${result.pitch}`;
       setSelectedName(preserveDraft && selectedName ? selectedName : data.serviceNames[0]);
       setStep(5);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "다시 시도해 주세요.");
+      const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+      setError(timedOut ? "AI 응답 시간이 길어 작업을 중단했습니다. 아래 버튼을 눌러 다시 실행해 주세요." : e instanceof Error ? e.message : "다시 시도해 주세요.");
     } finally {
       setLoading(false);
     }
@@ -645,9 +647,18 @@ ${result.pitch}`;
           </MissionCard>}
 
           {step === 4 && <div className="loading-card">
-            <div className="loader">🤖</div><h2>AI 창업 코치가 사업 아이템을 설계하고 있어요</h2>
-            <p>문제 근거 · 고객가치 · 차별점 · 수익모델 · 작은 실험 · 발표문을 연결하는 중</p><div className="loading-line"><i/></div>
-            {error && <><p className="error">{error}</p><button className="primary" onClick={()=>void createBusiness(false)}>다시 시도</button></>}
+            {loading ? <>
+              <div className="loader">🤖</div><h2>AI 창업 코치가 사업 아이템을 설계하고 있어요</h2>
+              <p>문제 근거 · 고객가치 · 차별점 · 수익모델 · 작은 실험 · 발표문을 연결하는 중</p><div className="loading-line"><i/></div>
+              <small className="rerun-note">최대 35초 동안 기다린 뒤 응답이 없으면 자동으로 중단됩니다.</small>
+            </> : <>
+              <div className="loader paused">⏸️</div>
+              <h2>이 기기에서는 AI 작업이 실행되고 있지 않습니다</h2>
+              <p>다른 팀원이 시작한 처리 상태가 공유되었거나 이전 요청이 중단되었습니다. 작성한 문제와 해결안은 그대로 남아 있습니다.</p>
+              {error && <p className="error">{error}</p>}
+              <button className="primary" onClick={()=>void createBusiness(false)}>AI 사업화 다시 실행 →</button>
+              <button className="back loading-back" onClick={()=>setStep(3)}>← 해결안 확인하기</button>
+            </>}
           </div>}
 
           {step === 5 && result && <div className="result-grid">
