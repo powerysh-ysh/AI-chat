@@ -5,12 +5,21 @@ type Input = {
   team?: string;
   problem?: string;
   solutionSeed?: string;
+  revisionMode?: boolean;
   discovery?: {
     customer?: string;
     situation?: string;
     rootCauses?: string[];
     problemStatement?: string;
+    validationQuestions?: string[];
   };
+  existingCandidates?: {
+    title?: string;
+    type?: string;
+    description?: string;
+    value?: string;
+    feasibility?: string;
+  }[];
 };
 
 function localFallback(input: Input, mode: "analyze" | "solutions") {
@@ -18,16 +27,17 @@ function localFallback(input: Input, mode: "analyze" | "solutions") {
   const seed = input.solutionSeed?.trim();
 
   if (mode === "analyze") {
+    const confirmed = input.discovery;
     return {
-      customer: "이 불편을 가장 자주 겪는 지역 주민 또는 방문객",
-      situation: "해당 지역의 서비스나 시설을 실제로 이용하려는 순간",
-      rootCauses: [
+      customer: confirmed?.customer?.trim() || "이 불편을 가장 자주 겪는 지역 주민 또는 방문객",
+      situation: confirmed?.situation?.trim() || "해당 지역의 서비스나 시설을 실제로 이용하려는 순간",
+      rootCauses: confirmed?.rootCauses?.some(item => item.trim()) ? confirmed.rootCauses : [
         "필요한 정보가 이용자에게 이해하기 쉽게 전달되지 않음",
         "기존 이용 과정이 처음 이용하는 사람의 관점에서 설계되지 않음",
         "문제가 생겼을 때 도움을 받거나 해결 방법을 찾기 어려움",
       ],
-      problemStatement: `지역 주민 또는 방문객이 서비스를 이용하는 상황에서 정보와 안내가 부족하여 ‘${problem}’라는 불편을 겪는다.`,
-      validationQuestions: [
+      problemStatement: confirmed?.problemStatement?.trim() || `지역 주민 또는 방문객이 서비스를 이용하는 상황에서 정보와 안내가 부족하여 ‘${problem}’라는 불편을 겪는다.`,
+      validationQuestions: confirmed?.validationQuestions?.some(item => item.trim()) ? confirmed.validationQuestions : [
         "이 불편을 최근 직접 겪은 사람은 누구이며 언제 발생했나요?",
         "현재는 어떤 방법으로 문제를 해결하고 있나요?",
         "이 문제가 해결된다면 가장 먼저 달라져야 할 것은 무엇인가요?",
@@ -82,6 +92,15 @@ export async function POST(request: Request) {
 팀명: ${input.team}
 참가자가 적은 불편: ${input.problem}
 M2에서 팀이 만든 해결 아이디어: ${input.solutionSeed || "아직 없음"}
+${input.discovery ? `참가자가 직접 검토·수정한 현재 분석:
+- 핵심 고객: ${input.discovery.customer || ""}
+- 문제가 생기는 순간: ${input.discovery.situation || ""}
+- 원인: ${(input.discovery.rootCauses ?? []).join(" / ")}
+- 최종 문제 정의: ${input.discovery.problemStatement || ""}
+- 현장 확인 질문: ${(input.discovery.validationQuestions ?? []).join(" / ")}` : "아직 참가자가 수정한 분석은 없습니다."}
+
+참가자가 직접 수정한 현재 분석은 '확정된 관찰·조사 내용'입니다. 재실행할 때 이 내용을 삭제하거나 반대 의미로 바꾸지 말고, 문장 흐름과 구체성만 보완하세요.
+예를 들어 참가자가 "안내표지판이 없다", "엘리베이터 위치를 몰랐다"고 적었다면 이를 "간판이 많아 복잡했다"처럼 다른 원인으로 바꾸면 안 됩니다.
 불편을 과장하거나 참가자의 의도를 바꾸지 마세요. 관찰한 사실과 추측을 구분하고, 원인은 사람 탓이 아닌 구조·과정·정보 관점에서 찾으세요.
 핵심 고객은 가장 절실한 한 집단으로 좁히세요. problemStatement는 "[누가] [어떤 상황에서] [무엇 때문에] [어떤 불편을 겪는다" 형식의 쉬운 한 문장으로 쓰세요.
 반드시 JSON 하나만 출력:
@@ -93,7 +112,11 @@ M2에서 팀이 만든 해결 아이디어: ${input.solutionSeed || "아직 없�
 근본 원인: ${(input.discovery?.rootCauses ?? []).join(", ")}
 최종 문제 정의: ${input.discovery?.problemStatement}
 M2에서 팀이 만든 원안: ${input.solutionSeed || "없음"}
-M2 원안을 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요. 첫 후보는 원안의 핵심 의도를 유지하며 구체화하고, 나머지는 원안을 실행 가능하게 만드는 서로 다른 사업화 방식으로 제안하세요.
+${input.existingCandidates?.length ? `현재 팀이 검토 중인 후보:
+${JSON.stringify(input.existingCandidates)}` : "아직 기존 후보는 없습니다."}
+
+M2 원안과 참가자가 직접 수정한 해결 문장은 확정된 방향입니다. 재실행할 때 이를 버리거나 엉뚱한 새 아이디어로 바꾸지 마세요.
+기존 후보가 있다면 사실과 핵심 의도를 유지하면서 구체성·실행성만 보완하세요. 첫 후보는 원안의 핵심 의도를 유지하며 구체화하고, 나머지는 원안을 실행 가능하게 만드는 서로 다른 사업화 방식으로 제안하세요.
 팀이 제공한 문제·고객·원안을 바탕으로 제안하세요. 실시간 검색이나 외부 통계를 사용하지 말고, 확인되지 않은 숫자는 만들지 마세요.
 초보 참가자가 이해할 수 있는 말로 쓰고, 1주일 안에 5명 이하에게 시험 가능한 방법을 포함하세요. recommendation은 가장 공감도·실행성·차별성이 균형 잡힌 후보의 0부터 시작하는 번호입니다.
 반드시 JSON 하나만 출력:
