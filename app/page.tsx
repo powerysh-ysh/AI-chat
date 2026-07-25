@@ -114,8 +114,10 @@ export default function Home() {
   const [workshopImport, setWorkshopImport] = useState<WorkshopImport | null>(null);
   const [imageNames, setImageNames] = useState<string[]>([]);
   const [collabMessage, setCollabMessage] = useState("팀 공동 작업 · 3초 동기화");
+  const [syncAuthError, setSyncAuthError] = useState("");
   const lastSyncedSnapshotRef = useRef("");
   const lastServerUpdatedAtRef = useRef("");
+  const syncAuthBlockedRef = useRef("");
 
   const currentSnapshot = useMemo(() => projectSnapshot({
     form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step,
@@ -146,7 +148,13 @@ export default function Home() {
   }, [form, discovery, solutionCandidates, selectedCandidate, result, selectedName, projectCode, teamPin, workshopImport]);
 
   useEffect(() => {
+    syncAuthBlockedRef.current = "";
+  }, [form.team, teamPin]);
+
+  useEffect(() => {
     if (!started || !form.team.trim() || !/^\d{4}$/.test(teamPin)) return;
+    const identity = `${form.team.trim()}::${teamPin}`;
+    if (syncAuthBlockedRef.current === identity) return;
     if (currentSnapshot === lastSyncedSnapshotRef.current) return;
     queueMicrotask(() => setSaveState("saving"));
     const timer = window.setTimeout(async () => {
@@ -157,11 +165,19 @@ export default function Home() {
           body: JSON.stringify({ code: projectCode, pin: teamPin, form, discovery, solutionCandidates, selectedCandidate, result, selectedName, workshopImport, step }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? "팀 정보를 저장하지 못했습니다.");
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 429) {
+            syncAuthBlockedRef.current = identity;
+            setSyncAuthError(data.error ?? "팀 비밀번호를 다시 확인해 주세요.");
+            setCollabMessage("공동 작업 일시 중지 · 비밀번호 확인 필요");
+          }
+          throw new Error(data.error ?? "팀 정보를 저장하지 못했습니다.");
+        }
         if (!projectCode && data.code) setProjectCode(data.code);
         lastSyncedSnapshotRef.current = currentSnapshot;
         if (data.updatedAt) lastServerUpdatedAtRef.current = data.updatedAt;
         setSaveState("saved");
+        setSyncAuthError("");
         setCollabMessage("공동 작업 저장 완료 ✓");
         setError("");
       } catch (e) {
@@ -175,16 +191,27 @@ export default function Home() {
   useEffect(() => {
     if (!started || !form.team.trim() || !/^\d{4}$/.test(teamPin)) return;
     let cancelled = false;
+    const identity = `${form.team.trim()}::${teamPin}`;
 
     const syncTeam = async () => {
+      if (syncAuthBlockedRef.current === identity) return;
       if (loading || saveState === "saving") return;
       if (lastSyncedSnapshotRef.current && currentSnapshot !== lastSyncedSnapshotRef.current) return;
       try {
-        const response = await fetch(`/api/projects?team=${encodeURIComponent(form.team)}&pin=${encodeURIComponent(teamPin)}`, {
+        const response = await fetch(`/api/projects?team=${encodeURIComponent(form.team)}&pin=${encodeURIComponent(teamPin)}&sync=1`, {
           cache: "no-store",
         });
         const data = await response.json();
-        if (!response.ok || cancelled || !data.project) return;
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 429) {
+            syncAuthBlockedRef.current = identity;
+            setSyncAuthError(data.error ?? "팀 비밀번호를 다시 확인해 주세요.");
+            setSaveState("error");
+            setCollabMessage("공동 작업 일시 중지 · 비밀번호 확인 필요");
+          }
+          return;
+        }
+        if (cancelled || !data.project) return;
         const remote = data.project as StoredProject;
         const remoteStep = remote.result ? Math.max(5, Number(remote.step) || 0) : Number(remote.step) || 0;
         const remoteSnapshot = projectSnapshot({ ...remote, step: remoteStep });
@@ -206,6 +233,26 @@ export default function Home() {
     // 같은 팀의 최신 DB 상태를 현재 로컬 상태와 비교합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started, form.team, teamPin, loading, saveState, currentSnapshot]);
+
+  async function reconnectTeam() {
+    if (!/^\d{4}$/.test(teamPin)) {
+      setSyncAuthError("팀 비밀번호 숫자 4자리를 입력해 주세요.");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/projects?team=${encodeURIComponent(form.team)}&pin=${encodeURIComponent(teamPin)}`, {
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "팀 비밀번호를 확인하지 못했습니다.");
+      syncAuthBlockedRef.current = "";
+      setSyncAuthError("");
+      setSaveState("idle");
+      setCollabMessage("공동 작업 다시 연결됨 ✓");
+    } catch (e) {
+      setSyncAuthError(e instanceof Error ? e.message : "팀 비밀번호를 다시 확인해 주세요.");
+    }
+  }
 
   useEffect(() => {
     if (!running || seconds <= 0) return;
@@ -510,6 +557,11 @@ ${result.pitch}`;
             <div><span className="mission-label">M3 · AI 창업 스튜디오</span><h1>{loading ? "AI 코치가 우리 팀의 사업을 설계하고 있어요…" : steps[step]}</h1></div>
             <div className="team-code"><small>우리 팀 · 공동 작업</small><strong>{form.team || "팀 이름 등록 전"}</strong><span>{saveState==="saving"?"DB 저장 중…":saveState==="error"?"저장 실패 · 인터넷 확인":collabMessage}</span></div>
           </div>
+          {syncAuthError && <div className="sync-auth-banner">
+            <div><b>🔐 공동 작업 연결을 확인해 주세요</b><span>{syncAuthError} 작성 중인 내용은 그대로 유지됩니다.</span></div>
+            <input aria-label="팀 비밀번호 다시 입력" type="password" inputMode="numeric" maxLength={4} value={teamPin} onChange={e=>setTeamPin(e.target.value.replace(/\D/g,"").slice(0,4))} placeholder="비밀번호 4자리"/>
+            <button type="button" onClick={()=>void reconnectTeam()}>다시 연결</button>
+          </div>}
           <div className="progress"><i style={{width:`${progress}%`}} /></div>
           <div className="step-dots seven">{steps.map((x,i)=>{
             const unlocked = i <= 1 || (i === 2 && !!discovery) || (i === 3 && solutionCandidates.length > 0) || (i >= 4 && !!result);
