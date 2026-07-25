@@ -49,6 +49,8 @@ export default function AdminPage() {
   const [teamActionBusy, setTeamActionBusy] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
+  const [restoreTarget, setRestoreTarget] = useState<Project | null>(null);
+  const [restoreJson, setRestoreJson] = useState("");
   const refreshInFlight = useRef(false);
 
   useEffect(() => {
@@ -286,6 +288,59 @@ export default function AdminPage() {
     }
   }
 
+  function openResultRestore(project: Project) {
+    setRestoreTarget(project);
+    setRestoreJson(JSON.stringify({
+      problem: project.problem || "",
+      solution: project.solution || "",
+      selectedName: project.selectedName || project.result?.serviceNames?.[0] || "",
+      result: {
+        serviceNames: project.result?.serviceNames ?? [],
+        slogan: project.result?.slogan ?? "",
+        customer: project.result?.customer ?? "",
+        problemInsight: project.problem || "",
+        solution: project.solution || "",
+        differentiator: project.result?.differentiator ?? "",
+        revenueModel: project.result?.revenueModel ?? "",
+        localImpact: project.result?.localImpact ?? "",
+        firstExperiment: project.result?.firstExperiment ?? "",
+        pitch: project.result?.pitch ?? "",
+        qa: [],
+      },
+    }, null, 2));
+  }
+
+  async function restoreProjectResult() {
+    if (!restoreTarget) return;
+    let restoreProject: unknown;
+    try {
+      restoreProject = JSON.parse(restoreJson);
+    } catch {
+      window.alert("복구 데이터의 JSON 형식을 확인해 주세요. 따옴표와 쉼표가 빠지지 않아야 합니다.");
+      return;
+    }
+
+    setTeamActionBusy(true);
+    try {
+      const response = await fetch("/api/admin/projects", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-pin": pin },
+        body: JSON.stringify({ restoreProjectCode: restoreTarget.code, restoreProject }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "결과물을 복구하지 못했습니다.");
+      setRestoreTarget(null);
+      setRestoreJson("");
+      setSelected(null);
+      await load(pin);
+      window.alert(`‘${data.team || restoreTarget.team}’ 팀의 결과물을 복구했습니다. 참가자 화면에서도 바로 확인할 수 있습니다.`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "결과물을 복구하지 못했습니다.");
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
   if (!signedIn) return (
     <main className="admin-login">
       <Link href="/" className="admin-home">← 참가자 스튜디오</Link>
@@ -430,8 +485,28 @@ export default function AdminPage() {
             <details><summary>3분 발표문 보기</summary><p>{selected.result.pitch}</p></details></> :
             <div className="not-yet">아직 AI 사업화 결과를 만들지 않았습니다.</div>}
           <button className="detail-print" onClick={() => window.print()}>인쇄·PDF 저장</button>
+          <button className="detail-restore-result" onClick={() => openResultRestore(selected)} disabled={teamActionBusy}>
+            📄 PPT·기존 결과물 복구
+          </button>
           <button className="detail-reset-pin" onClick={() => void resetProjectPin(selected)} disabled={teamActionBusy}>
             {teamActionBusy ? "처리 중…" : "🔑 팀 비밀번호 재설정"}
+          </button>
+        </aside>
+      </div>}
+
+      {restoreTarget && <div className="detail-backdrop" onClick={() => !teamActionBusy && setRestoreTarget(null)}>
+        <aside className="detail restore-detail" onClick={e => e.stopPropagation()}>
+          <button className="detail-close" onClick={() => setRestoreTarget(null)} disabled={teamActionBusy}>×</button>
+          <p>RESULT RECOVERY</p>
+          <h2>{restoreTarget.team} 결과물 복구</h2>
+          <span>PPT에서 정리한 JSON만 붙여넣으세요. 팀 비밀번호와 기존 팀원 정보는 바뀌지 않습니다.</span>
+          <label className="restore-json-label">
+            복구 데이터 JSON
+            <textarea value={restoreJson} onChange={e => setRestoreJson(e.target.value)} spellCheck={false} />
+          </label>
+          <div className="restore-warning">주의: 저장하면 이 팀의 M1·M2·M3 결과가 입력한 내용으로 교체되고 발표 준비 7단계로 이동합니다.</div>
+          <button className="restore-submit" onClick={() => void restoreProjectResult()} disabled={teamActionBusy || !restoreJson.trim()}>
+            {teamActionBusy ? "복구 중…" : "이 팀 결과물 복구하기"}
           </button>
         </aside>
       </div>}
@@ -451,7 +526,8 @@ export default function AdminPage() {
         .live-card-head{display:grid;grid-template-columns:58px 1fr auto;gap:13px;align-items:center}.team-sequence{display:grid;place-items:center;width:54px;height:54px;background:#28211d;color:#fff;border-radius:17px;font-size:24px;font-weight:950}.team-sequence small{font-size:8px;letter-spacing:1px;color:#ffba8e}.live-card-head>div{min-width:0}.live-card-head>div>small{color:#9b8d81}.live-card-head h2{font-size:22px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.live-card-head p{margin:0;color:#81756b;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.team-badges{display:grid;justify-items:end;gap:5px}.team-badges i{font-style:normal;background:#eee7e0;color:#86796f;border-radius:99px;padding:7px 10px;font-size:11px;font-weight:850}.team-badges i.active{background:#def7e9;color:#24724a}.display-badge{background:#fff0c8;color:#9a6200;border:1px solid #f2cf79;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:950}
         .stage-line{display:flex;align-items:end;justify-content:space-between;margin-top:19px}.stage-line>div{display:grid;gap:2px}.stage-line b{font-size:10px;color:#ee5a24;letter-spacing:1px}.stage-line strong{font-size:17px}.stage-line>span{font-size:12px;color:#8c8076}.mini-progress{height:7px;background:#eee6dd;border-radius:99px;overflow:hidden;margin:9px 0 16px}.mini-progress i{display:block;height:100%;background:linear-gradient(90deg,#ff5b22,#ffc83d);border-radius:99px;transition:width .35s}
         .live-content{display:grid;grid-template-columns:1fr 1fr;gap:9px}.live-content section{min-width:0;background:#faf6f1;border-radius:13px;padding:11px}.live-content section:last-child{grid-column:1/-1}.live-content section.complete-content{background:#ebf8f0}.live-content small{display:block;color:#a05730;font-weight:900;font-size:10px;margin-bottom:5px}.live-content p{margin:0;color:#5f564e;font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}.live-team-card footer{display:flex;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid #eee4da;font-size:11px;color:#90847a}.live-team-card footer strong{color:#ee5a24}.live-empty{grid-column:1/-1;background:#fff;border:1px solid #e7d8c8;border-radius:18px}
-        .detail-reset-pin{width:100%;margin-top:8px;border:1px solid #d8c7b7;background:#fff7ef;color:#6a4b36;border-radius:12px;padding:13px;font-weight:900;cursor:pointer}.detail-reset-pin:disabled{opacity:.55;cursor:not-allowed}
+        .detail-reset-pin,.detail-restore-result{width:100%;margin-top:8px;border:1px solid #d8c7b7;background:#fff7ef;color:#6a4b36;border-radius:12px;padding:13px;font-weight:900;cursor:pointer}.detail-restore-result{background:#28211d;border-color:#28211d;color:#fff}.detail-reset-pin:disabled,.detail-restore-result:disabled{opacity:.55;cursor:not-allowed}
+        .restore-detail{width:min(760px,calc(100vw - 30px))}.restore-json-label{display:grid;gap:8px;margin-top:20px;font-weight:900}.restore-json-label textarea{width:100%;min-height:390px;resize:vertical;border:1px solid #dfcdbc;border-radius:14px;padding:15px;background:#fffdfb;color:#382f29;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.restore-warning{margin-top:12px;padding:12px 14px;border-radius:12px;background:#fff1ca;color:#75510d;font-size:12px;line-height:1.5}.restore-submit{width:100%;margin-top:13px;border:0;border-radius:13px;padding:15px;background:#ff5b22;color:#fff;font-weight:950;cursor:pointer}.restore-submit:disabled{opacity:.55;cursor:wait}
         @keyframes livePulse{70%{box-shadow:0 0 0 7px #3ee48f00}}
         @media(max-width:1100px){.live-tools{grid-template-columns:1fr}.live-tools .team-view-filter{border-right:0;padding-right:0}.live-team-grid{grid-template-columns:1fr}}
         @media(max-width:600px){.live-card-head{grid-template-columns:48px 1fr}.team-sequence{width:46px;height:46px;font-size:20px}.team-badges{grid-column:1/-1;justify-items:start}.live-content{grid-template-columns:1fr}.live-content section:last-child{grid-column:auto}.live-team-card{padding:16px}.live-team-card.selection-mode{padding-top:54px}.live-strip{width:100%;border-radius:13px;flex-wrap:wrap}.admin-actions{flex-wrap:wrap}.team-selection-bar{align-items:flex-start;flex-direction:column}.team-selection-bar nav{width:100%}.team-selection-bar button{flex:1}}
