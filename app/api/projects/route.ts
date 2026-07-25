@@ -44,6 +44,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const requestedTeam = (url.searchParams.get("team") ?? "").trim();
     const requestedPin = cleanPin(url.searchParams.get("pin") ?? "");
+    const passiveSync = url.searchParams.get("sync") === "1";
     if (!requestedTeam) {
       return Response.json({ error: "등록했던 팀 이름을 입력해 주세요." }, { status: 400 });
     }
@@ -71,6 +72,11 @@ export async function GET(request: Request) {
       return Response.json({ error: "이 팀은 이전 방식으로 저장되었습니다. 현재 사용하던 기기에서 팀 비밀번호를 먼저 등록해 주세요." }, { status: 409 });
     }
     if (row.pinHash !== pinHash(row.team, requestedPin)) {
+      // 공동작업 자동 갱신은 잘못된 비밀번호를 반복 전송할 수 있으므로
+      // 로그인 실패 횟수에 포함하지 않습니다. 참가자가 직접 불러올 때만 집계합니다.
+      if (passiveSync) {
+        return Response.json({ error: "공동 작업 비밀번호가 현재 팀의 비밀번호와 다릅니다." }, { status: 401 });
+      }
       const attempts = (Number(row.failedPinAttempts) || 0) + 1;
       await snapshot.ref.set({
         failedPinAttempts: attempts >= 5 ? 0 : attempts,
