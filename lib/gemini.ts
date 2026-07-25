@@ -6,6 +6,7 @@ type GeminiOptions = {
   prompt: string;
   images?: string[];
   useSearch?: boolean;
+  timeoutMs?: number;
 };
 
 function parseDataUrl(image: string): GeminiPart {
@@ -67,7 +68,7 @@ function createGeminiError(status: number, detail: string, model: string) {
   return error;
 }
 
-export async function callGeminiJson({ prompt, images = [], useSearch = false }: GeminiOptions) {
+export async function callGeminiJson({ prompt, images = [], useSearch = false, timeoutMs = 30000 }: GeminiOptions) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY가 없습니다.");
 
@@ -87,6 +88,7 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
   ])];
 
   let lastError: Error | null = null;
+  const deadline = Date.now() + timeoutMs;
   // 무료 등급에서 Google Search가 막히면 같은 요청을 검색 없이 한 번 더 수행합니다.
   const searchModes = useSearch ? [true, false] : [false];
 
@@ -108,6 +110,11 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
     if (searchEnabled) body.tools = [{ google_search: {} }];
 
     for (const model of models) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        lastError = new Error("Gemini 전체 응답 시간이 초과되었습니다.");
+        break;
+      }
       let response: Response;
       try {
         response = await fetch(
@@ -116,7 +123,7 @@ export async function callGeminiJson({ prompt, images = [], useSearch = false }:
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(Math.max(1000, Math.min(7000, remaining))),
           },
         );
       } catch (error) {
