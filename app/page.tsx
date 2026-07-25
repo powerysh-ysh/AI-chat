@@ -231,7 +231,7 @@ export default function Home() {
 ${result.pitch}`;
   }, [form.team, result, selectedName]);
 
-  async function createBusiness() {
+  async function createBusiness(preserveDraft = false) {
     setLoading(true);
     setError("");
     setStep(4);
@@ -239,12 +239,18 @@ ${result.pitch}`;
       const response = await fetch("/api/coach", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          discovery,
+          currentDraft: preserveDraft ? result : null,
+          selectedName: preserveDraft ? selectedName : "",
+          revisionMode: preserveDraft,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "AI 검색·분석에 실패했습니다.");
       setResult(data);
-      setSelectedName(data.serviceNames[0]);
+      setSelectedName(preserveDraft && selectedName ? selectedName : data.serviceNames[0]);
       setStep(5);
     } catch (e) {
       setError(e instanceof Error ? e.message : "다시 시도해 주세요.");
@@ -254,8 +260,8 @@ ${result.pitch}`;
   }
 
   function rerunBusiness() {
-    if (!window.confirm("현재 사업 한 장과 발표문을 새로운 AI 결과로 바꿀까요? 팀이 직접 수정한 내용도 새 결과로 바뀝니다.")) return;
-    void createBusiness();
+    if (!window.confirm("팀이 직접 수정한 사업 한 장과 발표문을 확정 내용으로 유지하면서 부족한 부분만 다시 보완할까요?")) return;
+    void createBusiness(true);
   }
 
   async function analyzeProblem() {
@@ -263,7 +269,14 @@ ${result.pitch}`;
     try {
       const response = await fetch("/api/ideate", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "analyze", team: form.team, problem: form.problem, solutionSeed: form.solution }),
+        body: JSON.stringify({
+          mode: "analyze",
+          team: form.team,
+          problem: form.problem,
+          solutionSeed: form.solution,
+          discovery,
+          revisionMode: Boolean(discovery),
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "문제를 분석하지 못했습니다.");
@@ -271,6 +284,11 @@ ${result.pitch}`;
     } catch (e) {
       setError(e instanceof Error ? e.message : "다시 시도해 주세요.");
     } finally { setLoading(false); }
+  }
+
+  function rerunProblemAnalysis() {
+    if (!window.confirm("팀이 직접 고친 고객·상황·원인·문제 정의를 확정 사실로 유지하면서 분석을 보완할까요?")) return;
+    void analyzeProblem();
   }
 
   async function importWorkshopSheets(files: FileList | null) {
@@ -309,7 +327,15 @@ ${result.pitch}`;
     try {
       const response = await fetch("/api/ideate", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "solutions", team: form.team, problem: form.problem, solutionSeed: form.solution, discovery }),
+        body: JSON.stringify({
+          mode: "solutions",
+          team: form.team,
+          problem: form.problem,
+          solutionSeed: form.solution,
+          discovery,
+          existingCandidates: solutionCandidates,
+          revisionMode: solutionCandidates.length > 0,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "해결안을 만들지 못했습니다.");
@@ -320,6 +346,11 @@ ${result.pitch}`;
     } catch (e) {
       setError(e instanceof Error ? e.message : "다시 시도해 주세요.");
     } finally { setLoading(false); }
+  }
+
+  function rerunSolutions() {
+    if (!window.confirm("팀이 직접 수정한 최종 해결 문장을 유지하면서 해결 후보를 다시 보완할까요?")) return;
+    void generateSolutions();
   }
 
   function chooseCandidate(candidate: SolutionCandidate, index: number) {
@@ -537,7 +568,8 @@ ${result.pitch}`;
               <label className="field-label tone-label">우리 팀의 최종 문제 정의</label>
               <textarea className="big-input compact" value={discovery.problemStatement} onChange={e=>setDiscovery({...discovery,problemStatement:e.target.value})}/>
               <details className="validation-box"><summary>현장에서 확인할 질문 3개 보기</summary>{discovery.validationQuestions.map((q,i)=><p key={`${q}-${i}`}>{i+1}. {q}</p>)}</details>
-              <button className="rerun-ai" onClick={()=>void analyzeProblem()}>↻ AI 문제 분석 다시 실행</button>
+              <button className="rerun-ai" onClick={rerunProblemAnalysis}>↻ AI 문제 분석 다시 실행</button>
+              <small className="rerun-note">직접 수정한 고객·상황·원인·문제 문장을 확정 사실로 반영합니다.</small>
               <Nav onBack={()=>setStep(1)} disabled={!discovery.problemStatement.trim()} onNext={generateSolutions} nextLabel="해결 아이디어 3개 만들기 →"/>
             </> : <><p className="error">{error}</p><button className="primary" onClick={analyzeProblem}>문제 다시 분석하기</button></>}
           </MissionCard>}
@@ -554,7 +586,8 @@ ${result.pitch}`;
               <div className="formula">✅ <strong>선택 기준</strong>　고객이 정말 원하는가? · 우리 팀이 작게 시험할 수 있는가? · 기존 방식보다 나은가?</div>
               <label className="field-label tone-label">발표 분위기를 골라 주세요</label>
               <div className="tone-row">{(["따뜻하고 공감되게","재미있고 유쾌하게","전문적이고 설득력 있게"] as const).map(x=><button className={form.tone===x?"selected":""} onClick={()=>setForm({...form,tone:x})} key={x}>{x}</button>)}</div>
-              <button className="rerun-ai" onClick={()=>void generateSolutions()}>↻ 해결 아이디어 3개 다시 만들기</button>
+              <button className="rerun-ai" onClick={rerunSolutions}>↻ 해결 아이디어 3개 다시 만들기</button>
+              <small className="rerun-note">팀이 고친 최종 해결 문장과 현재 후보의 핵심 의도를 유지해 보완합니다.</small>
               <Nav onBack={()=>setStep(2)} disabled={!form.solution.trim()} onNext={createBusiness} nextLabel="선택안 AI로 사업화하기 ✨" />
             </>}
           </MissionCard>}
@@ -562,7 +595,7 @@ ${result.pitch}`;
           {step === 4 && <div className="loading-card">
             <div className="loader">🤖</div><h2>AI 창업 코치가 사업 아이템을 설계하고 있어요</h2>
             <p>문제 근거 · 고객가치 · 차별점 · 수익모델 · 작은 실험 · 발표문을 연결하는 중</p><div className="loading-line"><i/></div>
-            {error && <><p className="error">{error}</p><button className="primary" onClick={createBusiness}>다시 시도</button></>}
+            {error && <><p className="error">{error}</p><button className="primary" onClick={()=>void createBusiness(false)}>다시 시도</button></>}
           </div>}
 
           {step === 5 && result && <div className="result-grid">
@@ -594,7 +627,7 @@ ${result.pitch}`;
               <button className="back full" onClick={copyAll}>{copied ? "복사했어요 ✓" : "전체 내용 복사"}</button>
               <button className="back full" onClick={()=>window.print()}>사업 한 장 인쇄·PDF</button>
               <button className="rerun-ai full" onClick={rerunBusiness}>↻ AI 사업화 다시 실행</button>
-              <small className="rerun-note">다시 실행하면 사업 한 장과 발표문이 새로운 결과로 바뀝니다.</small>
+              <small className="rerun-note">팀이 고친 문장·추가 조사·말투를 유지하고 부족한 연결만 보완합니다.</small>
               <button className="text-button" onClick={()=>setStep(3)}>← 해결안 다시 비교하기</button>
             </aside>
           </div>}
