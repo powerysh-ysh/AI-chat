@@ -95,6 +95,57 @@ function localFallback(input: Input, reason: string): CoachResult {
   };
 }
 
+function cleanText(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function cleanList(value: unknown, fallback: string[], limit = 4) {
+  if (!Array.isArray(value)) return fallback;
+  const items = value
+    .filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+    .map(item => item.trim())
+    .slice(0, limit);
+  return items.length ? items : fallback;
+}
+
+function normalizeCoachResult(value: unknown, input: Input, notice = ""): CoachResult {
+  const fallback = localFallback(input, notice || "AI 응답에서 빠진 항목은 팀 입력을 기준으로 안전하게 보완했습니다.");
+  const candidate = value && typeof value === "object" ? value as Partial<CoachResult> : {};
+  const qa = Array.isArray(candidate.qa)
+    ? candidate.qa
+      .filter(item => item && typeof item.question === "string" && typeof item.answer === "string")
+      .map(item => ({ question: item.question.trim(), answer: item.answer.trim() }))
+      .filter(item => item.question && item.answer)
+      .slice(0, 4)
+    : [];
+  const evidence = Array.isArray(candidate.evidence)
+    ? candidate.evidence
+      .filter(item => item && typeof item.claim === "string" && typeof item.sourceTitle === "string" && typeof item.url === "string")
+      .map(item => ({ claim: item.claim.trim(), sourceTitle: item.sourceTitle.trim(), url: item.url.trim() }))
+      .filter(item => item.claim && item.sourceTitle && /^https:\/\//.test(item.url))
+      .slice(0, 5)
+    : [];
+
+  return {
+    serviceNames: cleanList(candidate.serviceNames, fallback.serviceNames, 3),
+    slogan: cleanText(candidate.slogan, fallback.slogan),
+    customer: cleanText(candidate.customer, fallback.customer),
+    problemInsight: cleanText(candidate.problemInsight, fallback.problemInsight),
+    solution: cleanText(candidate.solution, fallback.solution),
+    differentiator: cleanText(candidate.differentiator, fallback.differentiator),
+    revenueModel: cleanText(candidate.revenueModel, fallback.revenueModel),
+    localImpact: cleanText(candidate.localImpact, fallback.localImpact),
+    firstExperiment: cleanText(candidate.firstExperiment, fallback.firstExperiment),
+    pitch: cleanText(candidate.pitch, fallback.pitch),
+    qa: qa.length ? qa : fallback.qa,
+    researchSummary: cleanText(candidate.researchSummary, fallback.researchSummary || ""),
+    evidence,
+    assumptions: cleanList(candidate.assumptions, fallback.assumptions || [], 3),
+    risks: cleanList(candidate.risks, fallback.risks || [], 3),
+    demo: candidate.demo === true,
+  };
+}
+
 function extractText(payload: unknown): string {
   const data = payload as { output_text?: string; output?: { content?: { text?: string }[] }[] };
   if (data.output_text) return data.output_text;
@@ -153,19 +204,21 @@ evidence는 반드시 빈 배열로 두고, qa는 4개를 만드세요.`;
   try {
     if (geminiKey) {
       try {
-        const parsed = await callGeminiJson({ prompt, useSearch: false, timeoutMs: 12000 }) as CoachResult;
-        return Response.json(parsed);
+        const parsed = await callGeminiJson({ prompt, useSearch: false, timeoutMs: 7000 });
+        return Response.json(normalizeCoachResult(parsed, input));
       } catch (error) {
         console.error("Gemini startup coaching failed", error);
         geminiError = error instanceof Error ? error.message : "Gemini 사업화 분석에 실패했습니다.";
-        if (!openAiKey) throw error;
+        // 워크숍 현장에서는 두 유료 AI를 차례로 오래 기다리지 않습니다.
+        // Gemini 키가 설정된 경우에는 짧게 재시도한 뒤 입력을 보존한 안전 결과를 즉시 반환합니다.
+        return Response.json(normalizeCoachResult(null, input, geminiError));
       }
     }
 
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${openAiKey}` },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || "gpt-5.6-terra",
         tools: [],
@@ -182,10 +235,10 @@ evidence는 반드시 빈 배열로 두고, qa는 4개를 만드세요.`;
         : "OpenAI 사업화 분석에도 실패했습니다.";
       return Response.json(localFallback(input, geminiError || fallbackMessage));
     }
-    const parsed = parseJson(extractText(await response.json())) as CoachResult;
-    return Response.json(parsed);
+    const parsed = parseJson(extractText(await response.json()));
+    return Response.json(normalizeCoachResult(parsed, input));
   } catch (error) {
-    return Response.json(localFallback(input, error instanceof Error ? error.message : "AI 분석 오류"));
+    return Response.json(normalizeCoachResult(null, input, error instanceof Error ? error.message : "AI 분석 오류"));
   }
 }
 import { callGeminiJson } from "@/lib/gemini";
