@@ -286,7 +286,7 @@ ${result.pitch}`;
       const response = await fetch("/api/coach", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(18000),
         body: JSON.stringify({
           ...form,
           discovery,
@@ -297,6 +297,9 @@ ${result.pitch}`;
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "AI 검색·분석에 실패했습니다.");
+      if (!Array.isArray(data.serviceNames) || !data.serviceNames.length) {
+        throw new Error("AI 결과를 정리하지 못했습니다. 다시 실행해 주세요.");
+      }
       setResult(data);
       setSelectedName(preserveDraft && selectedName ? selectedName : data.serviceNames[0]);
       setStep(5);
@@ -650,7 +653,7 @@ ${result.pitch}`;
             {loading ? <>
               <div className="loader">🤖</div><h2>AI 창업 코치가 사업 아이템을 설계하고 있어요</h2>
               <p>문제 근거 · 고객가치 · 차별점 · 수익모델 · 작은 실험 · 발표문을 연결하는 중</p><div className="loading-line"><i/></div>
-              <small className="rerun-note">최대 35초 동안 기다린 뒤 응답이 없으면 자동으로 중단됩니다.</small>
+              <small className="rerun-note">보통 10초 안에 완료됩니다. AI가 혼잡해도 입력 내용을 보존한 기본 사업안으로 자동 전환됩니다.</small>
             </> : <>
               <div className="loader paused">⏸️</div>
               <h2>이 기기에서는 AI 작업이 실행되고 있지 않습니다</h2>
