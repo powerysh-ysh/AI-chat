@@ -20,6 +20,7 @@
 
 .brand-home{border:0;background:transparent;color:inherit;padding:0;cursor:pointer}.app-switch{display:flex;align-items:center;gap:6px}.app-switch>a{color:#675d54;text-decoration:none;padding:9px 11px;border-radius:10px;font-size:13px;font-weight:850}.app-switch>a.active{background:#fff0e5;color:var(--orange)}
 .rerun-ai{border:1px solid #e6b999;background:#fff7ef;color:#c44a1b;border-radius:12px;padding:11px 15px;margin-top:14px;font-weight:900;cursor:pointer}.rerun-ai:hover{background:#ffefe1}.rerun-ai.full{width:100%}.rerun-note{display:block;color:#8a7d72;line-height:1.45;margin:7px 3px 0}
+.loader.paused{animation:none;font-size:58px}.loading-back{margin-left:9px}.loading-card .rerun-note{margin-top:15px}
 .sync-auth-banner{display:grid;grid-template-columns:1fr 150px auto;gap:10px;align-items:center;background:#fff2df;border:1px solid #efc38f;border-radius:15px;padding:13px 15px;margin:0 0 15px}.sync-auth-banner>div{display:grid;gap:3px}.sync-auth-banner span{font-size:12px;color:#7d5b39}.sync-auth-banner input{min-width:0;border:1px solid #d9b587;background:#fff;border-radius:10px;padding:11px;letter-spacing:3px}.sync-auth-banner button{border:0;background:#342b25;color:#fff;border-radius:10px;padding:11px 15px;font-weight:900;cursor:pointer}
 @media(max-width:700px){.sync-auth-banner{grid-template-columns:1fr 1fr}.sync-auth-banner>div{grid-column:1/-1}}
 @media(max-width:850px){.app-switch>a{font-size:11px;padding:7px}.app-switch .ghost{font-size:11px;padding:8px}}
